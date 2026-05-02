@@ -1,0 +1,22 @@
+# DataGolf API key — never commit
+dg api key
+
+# Claude Code internal state
+.claude/
+
+# Symlinked from chip-input via iCloud — do not commit binary state
+# (these are runtime data, not part of the repo)
+picks_history.json
+picks_history.csv
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+.DS_Store
+
+# Synced from chip-input via iCloud — symlinked at deploy time, not committed
+standings/standings_latest.json

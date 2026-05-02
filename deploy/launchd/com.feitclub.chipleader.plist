@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.feitclub.chipleader</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>-l</string>
+        <string>-c</string>
+        <string>export DATAGOLF_API_KEY="$(/usr/bin/security find-generic-password -s chip-leader -a datagolf -w)"; exec /Users/jason/chip-leader/chip web 8765</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/jason/chip-leader</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jason/Library/Logs/chip-leader.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/jason/Library/Logs/chip-leader.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

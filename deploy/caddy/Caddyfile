@@ -1,0 +1,27 @@
+# chip-leader · Caddy reverse proxy
+#
+# Phase 1 (LAN-only):
+#   Reach via http://macmini.local:8765 directly — Caddy is optional.
+#
+# Phase 2 (anywhere via Tailscale Funnel):
+#   Replace the site label below with your Tailnet hostname, then run:
+#     sudo tailscale funnel 8765
+#
+# Generate a bcrypt hash for basicauth:
+#   caddy hash-password
+#
+# Install: brew install caddy
+# Run:     caddy run --config /opt/homebrew/etc/Caddyfile
+
+# LAN, no TLS — simplest
+chip.local:80 {
+    reverse_proxy localhost:8765
+}
+
+# Public via Tailscale Funnel (uncomment + edit hostname)
+# chip.<your-tailnet>.ts.net {
+#     basicauth {
+#         jason <bcrypt-hash-from-`caddy hash-password`>
+#     }
+#     reverse_proxy localhost:8765
+# }

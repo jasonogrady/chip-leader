@@ -1,0 +1,62 @@
+#!/usr/bin/env zsh
+# chip — Feit Club Golf Pool · gameday live tracker (chip-leader)
+#
+# Usage:
+#   chip leaderboard [--watch [SECS]] [--demo] [--sg] [--full] [--tke] [--all]
+#   chip lb          (shorthand)
+#   chip web         [PORT]   open live pool in browser (default port 8765)
+#   chip w           (shorthand)
+#
+# This is the gameday-only fork. Wednesday picking lives in chip-input.
+
+SCRIPT_DIR="${0:A:h}"
+
+_usage() {
+  cat <<EOF
+Usage: chip <subcommand> [options]
+
+Subcommands:
+  leaderboard  (lb)    live pool tracker (terminal)
+                         --watch [N]   auto-refresh every N seconds (default 60)
+                         --demo        simulated mid-round snapshot
+                         --sg          show strokes-gained watchlist
+                         --full        full top-50 table (default: side-by-side)
+                         --tke         TKE group leaderboard only
+                         --all         show all entries
+
+  web          (w)     open live pool in browser
+                         [PORT]        port to listen on (default 8765)
+                         --demo        simulated mid-round snapshot
+EOF
+}
+
+case "${1:-}" in
+  leaderboard|lb)
+    shift
+    exec python3 "$SCRIPT_DIR/track_tournament.py" "$@"
+    ;;
+  web|w)
+    shift
+    PORT="${1:-8765}"
+    # If first arg looks like a port number, consume it; otherwise pass nothing extra
+    if [[ "$PORT" =~ ^[0-9]+$ ]]; then
+      shift 2>/dev/null || true
+      exec python3 "$SCRIPT_DIR/track_tournament.py" --serve "$PORT" "$@"
+    else
+      exec python3 "$SCRIPT_DIR/track_tournament.py" --serve "$@"
+    fi
+    ;;
+  "")
+    _usage
+    exit 1
+    ;;
+  -h|--help|help)
+    _usage
+    exit 0
+    ;;
+  *)
+    echo "chip: unknown subcommand '$1'"
+    _usage
+    exit 1
+    ;;
+esac

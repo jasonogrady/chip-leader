@@ -1,0 +1,109 @@
+# chip-leader — Feit Club Golf Pool · Gameday Live Tracker
+
+Headless gameday-only fork of [`chip-input`](https://github.com/jasonogrady/chip-input). Designed to run on the home Mac mini server during PGA tournaments and publish a live leaderboard to the LAN (Phase 1) and the open internet via Tailscale Funnel (Phase 2).
+
+**My entry:** TIGER WOODS YALL!
+
+---
+
+## What this repo does
+
+- **`chip lb`** — terminal 3-panel scoreboard (Tournament Top 20 · Pool Top 20 · Top TKEs).
+- **`chip web`** — browser dark-theme dashboard at `localhost:8765` with sortable tables, 120s auto-refresh, mobile-responsive collapse.
+
+Inputs (read-only; written by chip-input on the laptop and synced via iCloud):
+
+- `standings/standings_latest.json` — season-to-date pool standings (winnings, score, FedEx, cuts_made, cuts_ratio, fedex).
+- `picks_history.json` — historical picks across all entries.
+
+Outputs:
+
+- DG live data fetched on-demand via the `pga-tour-live-stats` and prediction endpoints (DataGolf API key required at startup).
+
+---
+
+## What this repo *does not* do
+
+The Wednesday picking pipeline lives in `chip-input`:
+
+- DataGolf board enrichment, course fit, course history.
+- Competitor model + predicted ownership.
+- Pre-tournament odds tracking.
+- Season projection.
+- PDF parsing (standings, picks, results).
+- Pick tier calibration.
+
+When chip-input changes one of the cross-cutting JSON files, chip-leader picks it up on its next refresh.
+
+---
+
+## Run locally
+
+```zsh
+export DATAGOLF_API_KEY='your-key-here'
+./chip web        # browser at http://localhost:8765
+./chip lb         # terminal scoreboard
+```
+
+On the Mac mini, `DATAGOLF_API_KEY` should be in the macOS keychain rather than an env var:
+
+```zsh
+security add-generic-password -s chip-leader -a datagolf -w '<key>'
+# read at startup:
+export DATAGOLF_API_KEY="$(security find-generic-password -s chip-leader -a datagolf -w)"
+```
+
+---
+
+## Data sync from chip-input
+
+Both machines share iCloud Drive. The two cross-cutting data files are produced by chip-input on the laptop:
+
+- `~/Library/Mobile Documents/com~apple~CloudDocs/GitHub/chip-input/standings/standings_latest.json`
+- `~/Library/Mobile Documents/com~apple~CloudDocs/GitHub/chip-input/picks_history.json`
+
+On the Mac mini, symlink them into chip-leader's working tree so reads are direct:
+
+```zsh
+cd ~/chip-leader
+ln -sf "$ICLOUD/GitHub/chip-input/standings/standings_latest.json" standings/standings_latest.json
+ln -sf "$ICLOUD/GitHub/chip-input/picks_history.json"             picks_history.json
+```
+
+Where `$ICLOUD` is `~/Library/Mobile Documents/com~apple~CloudDocs`.
+
+---
+
+## Mac mini deployment
+
+See `BACKLOG.md` → "Mac mini deployment" for the LaunchAgent + Caddy + Tailscale Funnel walkthrough.
+
+---
+
+## File inventory
+
+| Path | Purpose |
+|---|---|
+| `track_tournament.py` | Live pool tracker — terminal + web server (`--serve PORT`); sortable tables, 120s countdown |
+| `chip` | CLI dispatcher (`chip lb`, `chip web`) |
+| `standings/standings_latest.json` | Season-to-date pool standings (synced from chip-input via iCloud) |
+| `picks_history.json` | Historical picks (synced from chip-input via iCloud) |
+| `deploy/launchd/` | LaunchAgent plist for headless run on Mac mini |
+| `deploy/caddy/` | Caddyfile for reverse-proxy + TLS |
+
+---
+
+## Web view features
+
+- **Pool Standings tab** — projected rank, current rank, current $, projected $, Δ$, Cuts ratio, projected position delta.
+- **Tournament Board tab** — DG live top 25 with win%, top10%, make-cut%.
+- **Top TKEs tab** — scored leaderboard for the TKE friend group with 🐉 markers.
+- **Narrative tab** — generated commentary on tournament + pool + TKE.
+
+TKE entries on the mixed Pool Standings tab are highlighted in red with a 🐉 emoji suffix; on the Top TKEs tab they render in default white so the gold "TIGER WOODS YALL!" row stands out.
+
+---
+
+## Versioning
+
+This repo starts at **v1.0**, forked from chip-input v4.2.1. The two version timelines diverge from here.
