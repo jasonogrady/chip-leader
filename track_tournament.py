@@ -1277,7 +1277,7 @@ _HTML_PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FEIT CLUB GOLF POOL</title>
+<title>🦫 Chip Leader 🏆</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -1290,7 +1290,14 @@ body {
   padding: 14px 24px; display: flex; align-items: center;
   justify-content: space-between; gap: 16px; flex-wrap: wrap;
 }
-.header-title { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: 0.4px; }
+.header-title {
+  font-size: 17px; font-weight: 700; color: #fff; letter-spacing: 0.4px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.brand-emoji { font-size: 18px; filter: drop-shadow(0 0 6px rgba(212,168,67,0.35)); }
+.brand-long  { display: inline; }
+.brand-short { display: none; }
+.header-sep  { color: #484f58; font-weight: 400; }
 .header-meta  { color: #8b949e; font-size: 11px; margin-top: 3px; }
 .header-right { display: flex; align-items: center; gap: 14px; }
 .last-fetched { font-size: 11px; color: #8b949e; white-space: nowrap; }
@@ -1298,10 +1305,12 @@ body {
 /* ── Countdown ring ── */
 .refresh-area { display: flex; align-items: center; gap: 10px; }
 .ring-wrap {
-  position: relative; width: 46px; height: 46px;
+  position: relative; width: 50px; height: 50px;
   display: flex; align-items: center; justify-content: center;
+  transition: filter 0.3s;
 }
-.countdown-svg { width: 46px; height: 46px; transform: rotate(-90deg); }
+.ring-wrap.low { filter: drop-shadow(0 0 6px rgba(248,81,73,0.65)); }
+.countdown-svg { width: 50px; height: 50px; transform: rotate(-90deg); }
 .ring-bg   { fill: none; stroke: #30363d; stroke-width: 3; }
 .ring-fill {
   fill: none; stroke: #d4a843; stroke-width: 3; stroke-linecap: round;
@@ -1313,17 +1322,33 @@ body {
   stroke-dasharray: 70 100; stroke-dashoffset: 0; stroke: #58a6ff;
   transition: none;
 }
-@keyframes ring-spin {
-  to { stroke-dashoffset: -100; }
-}
+@keyframes ring-spin { to { stroke-dashoffset: -100; } }
 .ring-label {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   transform: rotate(90deg);
-  font-size: 10px; font-weight: 700; color: #d4a843;
+  font-size: 11px; font-weight: 700; color: #d4a843;
   pointer-events: none;
+  font-variant-numeric: tabular-nums;
 }
-.ring-label.spin { color: #58a6ff; font-size: 9px; }
+.ring-label.low  { color: #f85149; animation: label-pulse 1s ease-in-out infinite; }
+.ring-label.spin { color: #58a6ff; font-size: 11px; animation: label-pulse 0.9s ease-in-out infinite; }
+@keyframes label-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+/* ── Loading shimmer bar (top of page during fetch) ── */
+.shimmer {
+  position: fixed; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, #58a6ff, transparent);
+  background-size: 50% 100%; background-repeat: no-repeat;
+  background-position: -50% 0;
+  opacity: 0; pointer-events: none; z-index: 100;
+  transition: opacity 0.2s;
+}
+.shimmer.on { opacity: 1; animation: shimmer-slide 1.1s linear infinite; }
+@keyframes shimmer-slide {
+  0%   { background-position: -50% 0; }
+  100% { background-position: 150% 0; }
+}
 
 .btn-update {
   background: #21262d; border: 1px solid #30363d;
@@ -1415,11 +1440,27 @@ tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
 .footer { text-align: center; color: #484f58; font-size: 11px;
   padding: 14px; border-top: 1px solid #1c2128; margin-top: 20px; }
 
+/* ── Tab label show/hide ── */
+.tab-long  { display: inline; }
+.tab-short { display: none; }
+.tab-ico   { font-size: 14px; }
+
 /* ── Mobile responsive (<=768px): hide secondary columns ── */
 @media (max-width: 768px) {
   .header { padding: 10px 14px; }
+  .header-title { font-size: 16px; gap: 6px; }
+  .brand-long { display: none; }
+  .brand-short { display: inline; }
+  .header-sep { font-size: 12px; }
+  .last-fetched { display: none; }
+  .ring-wrap, .countdown-svg { width: 56px; height: 56px; }
+  .ring-label { font-size: 12px; }
+  .btn-update { padding: 9px 14px; font-size: 13px; }
   .content { padding: 10px 8px; }
-  .tabs { padding: 0 8px; }
+  .tabs { padding: 0 6px; }
+  .tab-btn { padding: 10px 9px; font-size: 12px; }
+  .tab-long  { display: none; }
+  .tab-short { display: inline; }
   table { font-size: 11.5px; }
   thead th, tbody td { padding: 5px 7px; }
   /* Pool tab: hide Thru, Today, Proj Finish, Cur #, Cuts */
@@ -1439,9 +1480,17 @@ tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
 </head>
 <body>
 
+<div class="shimmer" id="shimmer"></div>
+
 <div class="header">
   <div>
-    <div class="header-title" id="hdr-title">FEIT CLUB GOLF POOL</div>
+    <div class="header-title">
+      <span class="brand-emoji">🦫</span>
+      <span class="brand-long">Chip Leaderboard</span>
+      <span class="brand-short">Chip Leader</span>
+      <span class="brand-emoji">🏆</span>
+      <span class="header-sep" id="hdr-context"></span>
+    </div>
     <div class="header-meta"  id="hdr-meta">Loading…</div>
   </div>
   <div class="header-right">
@@ -1460,10 +1509,10 @@ tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
 </div>
 
 <div class="tabs">
-  <button class="tab-btn active" onclick="switchTab(this,'pool')">Pool Standings</button>
-  <button class="tab-btn" onclick="switchTab(this,'tournament')">Tournament Board</button>
-  <button class="tab-btn" onclick="switchTab(this,'tke')">Top TKEs</button>
-  <button class="tab-btn" onclick="switchTab(this,'narrative')">Narrative</button>
+  <button class="tab-btn active" onclick="switchTab(this,'pool')"><span class="tab-ico">🏆</span><span class="tab-long"> Pool Standings</span><span class="tab-short"> Pool</span></button>
+  <button class="tab-btn" onclick="switchTab(this,'tournament')"><span class="tab-ico">⛳</span><span class="tab-long"> Tournament Board</span><span class="tab-short"> Board</span></button>
+  <button class="tab-btn" onclick="switchTab(this,'tke')"><span class="tab-ico">🐉</span><span class="tab-long"> Top TKEs</span><span class="tab-short"> TKEs</span></button>
+  <button class="tab-btn" onclick="switchTab(this,'narrative')"><span class="tab-ico">📝</span><span class="tab-long"> Narrative</span><span class="tab-short"> Story</span></button>
 </div>
 
 <div class="content">
@@ -1535,7 +1584,7 @@ tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
   </div>
 </div>
 
-<div class="footer">FEIT CLUB · One-and-Done · Powered by DataGolf</div>
+<div class="footer">🦫 Chip Leader · Feit Club One-and-Done · ⛳ Powered by DataGolf</div>
 
 <script>
 const REFRESH = 120;
@@ -1554,21 +1603,30 @@ function switchTab(btn, id) {
 function setRing(secs) {
   const fill  = document.getElementById('ring-fill');
   const label = document.getElementById('ring-label');
+  const wrap  = document.querySelector('.ring-wrap');
   const pct   = Math.max(0, secs / REFRESH);
   fill.classList.remove('spin');
   fill.style.strokeDashoffset = (1 - pct) * 100;
   fill.style.stroke = pct > 0.5 ? '#d4a843' : pct > 0.2 ? '#e3b341' : '#f85149';
   label.classList.remove('spin');
   label.textContent = secs + 's';
+  const low = secs <= 10 && secs > 0;
+  wrap.classList.toggle('low', low);
+  label.classList.toggle('low', low);
 }
 function setRingLoading() {
   const fill  = document.getElementById('ring-fill');
   const label = document.getElementById('ring-label');
+  const wrap  = document.querySelector('.ring-wrap');
   fill.classList.add('spin');
   fill.style.strokeDashoffset = '';
   label.classList.add('spin');
-  label.textContent = '…';
+  label.classList.remove('low');
+  wrap.classList.remove('low');
+  label.textContent = '⛳';
+  document.getElementById('shimmer').classList.add('on');
 }
+function clearShimmer() { document.getElementById('shimmer').classList.remove('on'); }
 function startTicker() {
   clearInterval(ticker);
   countdown = REFRESH;
@@ -1725,12 +1783,12 @@ function renderNarrative(lines) {
 // ── Render all ────────────────────────────────────────────────────────────────
 function renderAll(data) {
   const m = data.meta;
-  document.getElementById('hdr-title').textContent =
-    'FEIT CLUB GOLF POOL  ·  ' + m.tournament + '  ·  Round ' + m.round;
+  document.getElementById('hdr-context').textContent =
+    '·  ' + m.tournament + '  ·  R' + m.round;
   document.getElementById('hdr-meta').textContent =
-    m.n_total + ' entries  ·  DG updated: ' + m.last_update +
-    '  ·  standings as of ' + m.standings_date;
-  document.getElementById('last-fetched').textContent = 'fetched ' + m.fetched_at;
+    '👥 ' + m.n_total + ' entries  ·  🛰 DG ' + m.last_update +
+    '  ·  📊 standings ' + m.standings_date;
+  document.getElementById('last-fetched').textContent = '🕒 ' + m.fetched_at;
 
   const stale = document.getElementById('banner-stale');
   if (m.standings_stale_days != null && m.standings_stale_days > 14) {
@@ -1768,6 +1826,7 @@ function fetchData() {
     .then(data => {
       loading = false;
       bl.classList.remove('visible');
+      clearShimmer();
       btn.disabled = false;
       btn.textContent = 'Update Now';
       if (data.error) throw new Error(data.error);
@@ -1777,6 +1836,7 @@ function fetchData() {
     .catch(err => {
       loading = false;
       bl.classList.remove('visible');
+      clearShimmer();
       btn.disabled = false;
       btn.textContent = 'Update Now';
       be.textContent = 'Error: ' + err.message;
@@ -2005,6 +2065,7 @@ def build_web_data(args) -> dict:
 
 def serve_web(args, port: int = 8765) -> None:
     """Start lightweight HTTP server for the web view."""
+    import socket
     import threading
     import webbrowser
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -2046,17 +2107,24 @@ def serve_web(args, port: int = 8765) -> None:
 
     for attempt in range(10):
         try:
-            httpd = ThreadingHTTPServer(("127.0.0.1", port + attempt), Handler)
+            httpd = ThreadingHTTPServer(("0.0.0.0", port + attempt), Handler)
             port = port + attempt
             break
         except OSError:
             continue
     else:
         raise SystemExit(f"No free port found near {port}")
-    url = f"http://127.0.0.1:{port}"
+    try:
+        host = socket.gethostname()
+        if not host.endswith(".local"):
+            host = f"{host}.local"
+    except Exception:
+        host = "localhost"
+    url = f"http://{host}:{port}"
     print(f"\n  Web view:  {url}")
     print(f"  Auto-refresh: 120s   ·   Ctrl+C to stop\n")
-    threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+    if sys.stdout.isatty() and not os.environ.get("CHIP_NO_OPEN"):
+        threading.Timer(0.4, lambda: webbrowser.open(url)).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

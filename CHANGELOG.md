@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.1.0 — 2026-05-02
+
+### Branding
+- Rebranded from "FEIT CLUB GOLF POOL" to **🦫 Chip Leader 🏆** (beaver = Chip, trophy = Leader).
+- "Chip Leaderboard" on desktop, "Chip Leader" on phones; tournament + round shown as a subtle context tail.
+- Tabs got emoji + short mobile labels: 🏆 Pool / ⛳ Board / 🐉 TKEs / 📝 Story.
+- Header meta line gains 👥 / 🛰 / 📊 / 🕒 markers.
+
+### Live UI
+- Countdown ring is bigger on mobile (50→56px), adds a red glow + label pulse in the final 10 seconds.
+- During refresh: ⛳ ring label, animated blue shimmer bar across the top of the page, ring spinner.
+
+### Headless deployment
+- Server now binds `0.0.0.0` (was `127.0.0.1`) so phones on the LAN can reach it. Prints the `<host>.local` URL on startup.
+- Skips auto-opening the browser when not a TTY or when `CHIP_NO_OPEN=1` (LaunchAgent sets this).
+- LaunchAgent template at `deploy/launchd/com.feitclub.chipleader.plist` documented in BACKLOG Phase 1.
+
 ## v1.0.0 — 2026-05-01
 
 Initial fork from `chip-input` v4.2.1.

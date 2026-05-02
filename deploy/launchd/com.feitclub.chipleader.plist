@@ -10,9 +10,11 @@
         <string>/bin/zsh</string>
         <string>-l</string>
         <string>-c</string>
-        <string>export DATAGOLF_API_KEY="$(/usr/bin/security find-generic-password -s chip-leader -a datagolf -w)"; exec /Users/jason/chip-leader/chip web 8765</string>
+        <string>export DATAGOLF_API_KEY="$(/usr/bin/security find-generic-password -s chip-leader -a datagolf -w)"; exec "$HOME/chip-leader/chip" web 8765</string>
     </array>
 
+    <!-- launchd plists do not expand $HOME in path strings, so paths below
+         are populated by the deploy step. Edit jason → your username. -->
     <key>WorkingDirectory</key>
     <string>/Users/jason/chip-leader</string>
 
@@ -32,6 +34,8 @@
     <dict>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>CHIP_NO_OPEN</key>
+        <string>1</string>
     </dict>
 </dict>
 </plist>
