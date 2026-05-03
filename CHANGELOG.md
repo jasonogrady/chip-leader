@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.1 — 2026-05-03
+
+### Fix
+- `/data` collapses concurrent requests through a 30s in-memory cache + lock. Eliminates intermittent HTTP 500 ("[Errno 11] Resource deadlock avoided") that happened when ThreadingHTTPServer ran two SSL handshakes against DG simultaneously, and cuts DG quota burn when several phones poll within the same window.
+
 ## v1.2.0 — 2026-05-02
 
 ### Play status & event-local time

@@ -2290,6 +2290,23 @@ def serve_web(args, port: int = 8765) -> None:
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from urllib.parse import urlparse
 
+    # Collapse concurrent /data requests to a single DG fetch (30s TTL).
+    # Prevents macOS Secure Transport EDEADLK under concurrent SSL handshakes
+    # and cuts DG quota burn when many phones poll within the same window.
+    data_cache: dict = {"ts": 0.0, "payload": None}
+    data_lock = threading.Lock()
+    DATA_TTL = 30  # seconds
+
+    def get_cached_data():
+        with data_lock:
+            now = time.time()
+            if data_cache["payload"] is not None and now - data_cache["ts"] < DATA_TTL:
+                return data_cache["payload"]
+            payload = build_web_data(args)
+            data_cache["ts"] = now
+            data_cache["payload"] = payload
+            return payload
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *a):
             pass  # suppress access logs
@@ -2322,7 +2339,7 @@ def serve_web(args, port: int = 8765) -> None:
                 self.wfile.write(svg)
             elif path == "/data":
                 try:
-                    data = build_web_data(args)
+                    data = get_cached_data()
                     body = json.dumps(data).encode()
                     import hashlib
                     etag_src = str(data.get("meta", {}).get("last_update", "")) + "|" + str(len(body))
