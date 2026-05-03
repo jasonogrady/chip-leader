@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.1.1 — 2026-05-02
+
+### Live UI
+- Tournament/Pool/TKE table rows flash gold for 5s when rank, score, or today's score changes between refreshes (`row-flash` keyframe + per-tab `prevSnapshot`).
+- Mid-round `today` score falls back to `current_score − sum(prior rounds)` when DG returns null for the active round.
+
+### Branding & PWA
+- Terminal scoreboards now print "🦫 CHIP LEADER 🏆" headers (matching the web title).
+- Web view declares favicon, apple-touch-icon, and PWA meta tags so iOS "Add to Home Screen" gets the beaver/trophy icon and a black status bar.
+- Footer reads "🦫 Chip Leader 🏆 · Feit Club One-and-Done".
+
+### Docs
+- `CLAUDE.md` H1 rebranded to match.
+
 ## v1.1.0 — 2026-05-02
 
 ### Branding

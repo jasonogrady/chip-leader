@@ -1,4 +1,4 @@
-# chip-leader — Feit Club Golf Pool · Gameday Live Tracker
+# chip-leader — 🦫 Chip Leader 🏆 · Gameday Live Tracker
 
 Headless gameday-only fork of [`chip-input`](https://github.com/jasonogrady/chip-input). Designed to run on the home Mac mini server during PGA tournaments and publish a live leaderboard to the LAN (Phase 1) and the open internet via Tailscale Funnel (Phase 2).
 

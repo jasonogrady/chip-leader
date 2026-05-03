@@ -824,7 +824,7 @@ def render_scoreboard(args, refresh_secs: int | None = None) -> None:
 
     # ── Header ────────────────────────────────────────────────────────────────
     print("━" * W)
-    print(bold(f"  FEIT CLUB GOLF POOL  ·  {label}  Round {current_round}  ·  {now_str}{refresh_note}"))
+    print(bold(f"  🦫 CHIP LEADER 🏆  ·  {label}  Round {current_round}  ·  {now_str}{refresh_note}"))
     print(f"  {n_total} entries  ·  DG updated: {last_update}  ·  standings as of {standings_date}")
     print("━" * W)
     print()
@@ -1023,7 +1023,7 @@ def render(args, refresh_secs: int | None = None) -> None:
 
     # ── Header ───────────────────────────────────────────────────────────────
     print(f"{'━' * W}")
-    print(bold(f"  FEIT CLUB GOLF POOL  ·  {label}  Round {current_round}  ·  {now_str}{refresh_note}"))
+    print(bold(f"  🦫 CHIP LEADER 🏆  ·  {label}  Round {current_round}  ·  {now_str}{refresh_note}"))
     print(f"  {n_total} entries  ·  DG updated: {last_update}  ·  standings as of {standings_date}")
     print(f"{'━' * W}")
     print()
@@ -1278,6 +1278,12 @@ _HTML_PAGE = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🦫 Chip Leader 🏆</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Chip Leader">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d1117">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -1411,6 +1417,11 @@ thead th.r, td.r { text-align: right; font-variant-numeric: tabular-nums; }
 tbody tr { border-bottom: 1px solid #1c2128; }
 tbody tr:last-child { border-bottom: none; }
 tbody tr:hover td { background: #161b22; }
+@keyframes row-flash {
+  0%   { background: rgba(212,168,67,0.35); }
+  100% { background: transparent; }
+}
+tbody tr.flash td { animation: row-flash 5s ease-out; }
 tbody td { padding: 6px 11px; white-space: nowrap; }
 
 /* Row/cell states */
@@ -1584,11 +1595,17 @@ tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
   </div>
 </div>
 
-<div class="footer">🦫 Chip Leader · Feit Club One-and-Done · ⛳ Powered by DataGolf</div>
+<div class="footer">🦫 Chip Leader 🏆 · Feit Club One-and-Done · ⛳ Powered by DataGolf</div>
 
 <script>
 const REFRESH = 120;
 let countdown = REFRESH, ticker = null, loading = false;
+const prevSnapshot = { pool: {}, tournament: {}, tke: {} };
+function flashIfChanged(tr, key, signature, bucket) {
+  const prev = prevSnapshot[bucket][key];
+  if (prev !== undefined && prev !== signature) tr.classList.add('flash');
+  prevSnapshot[bucket][key] = signature;
+}
 const sortState = {};
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
@@ -1683,6 +1700,7 @@ function renderPool(entries) {
     const tr = document.createElement('tr');
     if (e.is_me) tr.classList.add('me');
     if (e.is_tke) tr.classList.add('tke');
+    flashIfChanged(tr, e.entry, e.rank + '|' + e.score + '|' + e.today, 'pool');
     const sv = e.score !== null && e.score !== undefined ? e.score : 999;
     const tv = e.today !== null && e.today !== undefined ? e.today : 999;
     const wv = -(e.win_pct || 0);
@@ -1716,6 +1734,7 @@ function renderTournament(players, myPick) {
   players.forEach(p => {
     const tr = document.createElement('tr');
     if (p.player === myPick) tr.classList.add('me');
+    flashIfChanged(tr, p.player, p.pos + '|' + p.score + '|' + p.today, 'tournament');
     const sv  = p.score !== null && p.score !== undefined ? p.score : 999;
     const tv  = p.today !== null && p.today !== undefined ? p.today : 999;
     tr.appendChild(td(p.pos || '—', ''));
@@ -1740,6 +1759,7 @@ function renderTKE(rows) {
     const tr = document.createElement('tr');
     if (r.is_me) tr.classList.add('me');
     // No .tke class on this tab: TKEs render white; my-entry stays gold.
+    flashIfChanged(tr, r.entry, r.proj + '|' + r.score, 'tke');
     const sv = r.score !== null && r.score !== undefined ? r.score : 999;
     const entryLabel = escapeHtml(r.entry) + '<span class="dragon">🐉</span>';
     tr.appendChild(td(i + 1,               'r',  i + 1));
@@ -1881,6 +1901,24 @@ def _strip_ansi(s: str) -> str:
     return re.sub(r'\033\[[0-9;]*m', '', s)
 
 
+def _today_with_fallback(player: dict, current_round: int):
+    """Return player's today-score, falling back to current_score minus prior
+    round totals when DG returns null mid-round."""
+    today = player.get(f"R{current_round}", player.get("today"))
+    if today is not None:
+        return today
+    total = player.get("current_score")
+    if total is None or current_round <= 1:
+        return None
+    prior = 0
+    for r in range(1, current_round):
+        rv = player.get(f"R{r}")
+        if rv is None:
+            return None
+        prior += rv
+    return total - prior
+
+
 def build_web_data(args) -> dict:
     """Fetch live data and build JSON payload for the web view."""
     if args.demo:
@@ -1928,7 +1966,7 @@ def build_web_data(args) -> dict:
             "fedex":      entry.get("fedex"),
         }
         if player:
-            today = player.get(f"R{current_round}", player.get("today"))
+            today = _today_with_fallback(player, current_round)
             row.update({
                 "score": player.get("current_score"),
                 "pos":   player.get("current_pos", ""),
@@ -1949,7 +1987,7 @@ def build_web_data(args) -> dict:
                          key=lambda p: (p.get("current_score", 0), p.get("player_name", "")))
     tournament_top = []
     for p in live_sorted[:25]:
-        today = p.get(f"R{current_round}", p.get("today"))
+        today = _today_with_fallback(p, current_round)
         tournament_top.append({
             "pos":      p.get("current_pos", ""),
             "player":   p.get("player_name", ""),
@@ -1981,7 +2019,7 @@ def build_web_data(args) -> dict:
             "proj_winnings": (standing.get("winnings") or 0) + (expected_payout(player) if player else 0.0),
         }
         if player:
-            today = player.get(f"R{current_round}", player.get("today"))
+            today = _today_with_fallback(player, current_round)
             row.update({
                 "score": player.get("current_score"),
                 "pos":   player.get("current_pos", ""),
@@ -2084,14 +2122,41 @@ def serve_web(args, port: int = 8765) -> None:
                 self.send_header("Content-Length", len(body))
                 self.end_headers()
                 self.wfile.write(body)
+            elif path in ("/icon.svg", "/apple-touch-icon.png", "/favicon.ico"):
+                # Beaver emoji rendered as SVG. Used for browser favicon and
+                # iOS home-screen icon; iOS 16+ accepts SVG for apple-touch-icon.
+                svg = (
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">'
+                    '<rect width="180" height="180" rx="36" fill="#0d1117"/>'
+                    '<text x="50%" y="54%" text-anchor="middle" '
+                    'dominant-baseline="middle" font-size="120" '
+                    'font-family="Apple Color Emoji,Segoe UI Emoji,sans-serif">'
+                    '\U0001F9AB</text></svg>'
+                ).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/svg+xml")
+                self.send_header("Content-Length", len(svg))
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                self.wfile.write(svg)
             elif path == "/data":
                 try:
                     data = build_web_data(args)
                     body = json.dumps(data).encode()
+                    import hashlib
+                    etag_src = str(data.get("meta", {}).get("last_update", "")) + "|" + str(len(body))
+                    etag = '"' + hashlib.md5(etag_src.encode()).hexdigest() + '"'
+                    if self.headers.get("If-None-Match") == etag:
+                        self.send_response(304)
+                        self.send_header("ETag", etag)
+                        self.send_header("Cache-Control", "no-cache")
+                        self.end_headers()
+                        return
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Content-Length", len(body))
                     self.send_header("Cache-Control", "no-cache")
+                    self.send_header("ETag", etag)
                     self.end_headers()
                     self.wfile.write(body)
                 except Exception as exc:
