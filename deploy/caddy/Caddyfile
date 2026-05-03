@@ -1,27 +1,13 @@
-# chip-leader · Caddy reverse proxy
+# chip-leader · Caddy reverse proxy (OPTIONAL · LAN convenience only)
 #
-# Phase 1 (LAN-only):
-#   Reach via http://macmini.local:8765 directly — Caddy is optional.
+# For the public chip.ogrady.football URL, Caddy is no longer used —
+# Cloudflare Tunnel handles TLS + auth. See deploy/cloudflared/SETUP.md.
 #
-# Phase 2 (anywhere via Tailscale Funnel):
-#   Replace the site label below with your Tailnet hostname, then run:
-#     sudo tailscale funnel 8765
-#
-# Generate a bcrypt hash for basicauth:
-#   caddy hash-password
-#
-# Install: brew install caddy
-# Run:     caddy run --config /opt/homebrew/etc/Caddyfile
+# This file is kept around only for the LAN convenience case below.
 
-# LAN, no TLS — simplest
+# Pretty hostname on the LAN (http://chip.local) instead of
+# http://macmini.local:8765. Requires a Bonjour/local DNS alias on the LAN.
+# Skip this entirely unless you actually want it.
 chip.local:80 {
     reverse_proxy localhost:8765
 }
-
-# Public via Tailscale Funnel (uncomment + edit hostname)
-# chip.<your-tailnet>.ts.net {
-#     basicauth {
-#         jason <bcrypt-hash-from-`caddy hash-password`>
-#     }
-#     reverse_proxy localhost:8765
-# }

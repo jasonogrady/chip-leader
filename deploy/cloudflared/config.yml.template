@@ -1,0 +1,19 @@
+# chip-leader · Cloudflare Tunnel config
+#
+# Install location:  ~/.cloudflared/config.yml
+# After `cloudflared tunnel create chipleader` runs, replace <TUNNEL-ID>
+# with the UUID printed by that command (also matches the credentials filename).
+
+tunnel: chipleader
+credentials-file: /Users/tensor/.cloudflared/<TUNNEL-ID>.json
+
+ingress:
+  - hostname: chip.ogrady.football
+    service: http://localhost:8765
+  - service: http_status:404
+
+# Optional knobs:
+#   originRequest:
+#     connectTimeout: 10s
+#     noTLSVerify: false
+#   metrics: 127.0.0.1:9099   # Prometheus on localhost only
