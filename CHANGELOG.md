@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.3.0 — 2026-05-03
+
+### Fix — HTTP 500 on /data
+- Long-running launchd-spawned process intermittently hit `OSError(EDEADLK)` on iCloud-symlinked `picks_history.json` / `standings_latest.json` and on concurrent SSL handshakes to DG, surfacing as HTTP 500.
+- New `_retry_edeadlk` helper unwraps `URLError.reason` chains so EDEADLK is detected when nested inside `urllib` errors.
+- File reads route through `_read_text_resilient`, which retries `read_text()` and falls back to shelling out to `/bin/cat` (bypasses the fd path that EDEADLKs in long-running daemons).
+- `get_cached_data` now serves the last successful payload if `build_web_data` raises, so transient DG/iCloud blips never reach the client once the cache is warm.
+
+### Auto-pause on tournament completion
+- `compute_play_status` accepts a `tournament_complete` flag → status `concluded` / label `Concluded`.
+- `build_web_data` derives it from live data: `current_round >= 4` and every player `thru == 18`. Catches the case where DG's `get-schedule` hasn't flipped to `completed` yet.
+- Frontend `startTicker` treats `play.status === 'concluded'` like off-hours: paused ⏸ ring + 10-min poll cadence (was: kept polling at 2-min cadence).
+
 ## v1.2.1 — 2026-05-03
 
 ### Fix

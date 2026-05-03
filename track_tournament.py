@@ -62,6 +62,63 @@ US_STATE_TZ = {
     "WI":"America/Chicago","WY":"America/Denver","DC":"America/New_York",
 }
 
+# macOS occasionally returns EDEADLK (errno 11) from Secure Transport during
+# concurrent SSL handshakes, and from NSFileCoordinator when reading
+# iCloud-materialized files. Retry the operation a few times before giving up.
+def _is_edeadlk(exc: BaseException) -> bool:
+    """Detect EDEADLK directly or wrapped (e.g. URLError.reason on macOS SSL)."""
+    seen = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, OSError) and getattr(cur, "errno", None) == 11:
+            return True
+        reason = getattr(cur, "reason", None)
+        if isinstance(reason, BaseException) and id(reason) not in seen:
+            cur = reason
+            continue
+        cur = cur.__cause__ or cur.__context__
+    return False
+
+
+def _retry_edeadlk(fn, *, attempts: int = 4, delay: float = 0.25):
+    last_exc: BaseException | None = None
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception as exc:
+            if not _is_edeadlk(exc):
+                raise
+            last_exc = exc
+            time.sleep(delay * (i + 1))
+    raise last_exc  # type: ignore[misc]
+
+
+def _urlopen_json(url: str, *, timeout: int = 30) -> dict:
+    req = urllib.request.Request(url, headers={"User-Agent": "jdog-datagolf/1.0"})
+    def _do():
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode())
+    return _retry_edeadlk(_do)
+
+
+def _read_text_resilient(path) -> str:
+    """Read a file, working around macOS iCloud EDEADLK on long-running daemons.
+
+    Long-running launchd processes occasionally hit OSError(EDEADLK) reading
+    iCloud-materialized files. The bytes are present and `cat` works fine, but
+    Python's open()/read_text both fail. Bypass the affected fd path by shelling
+    out to `cat` after first retrying the normal path.
+    """
+    try:
+        return _retry_edeadlk(lambda: path.read_text(), attempts=2, delay=0.1)
+    except OSError as exc:
+        if getattr(exc, "errno", None) != 11:
+            raise
+        import subprocess
+        return subprocess.check_output(["/bin/cat", str(path)], text=True)
+
+
 # Schedule cache: (timestamp, by_event_name dict). Refresh hourly.
 _SCHED_CACHE: dict = {"ts": 0.0, "by_name": {}}
 
@@ -71,9 +128,7 @@ def fetch_schedule() -> dict[str, dict]:
     if _SCHED_CACHE["by_name"] and now - _SCHED_CACHE["ts"] < 3600:
         return _SCHED_CACHE["by_name"]
     url = f"{BASE}/get-schedule?tour=pga&file_format=json&key={API_KEY}"
-    req = urllib.request.Request(url, headers={"User-Agent": "jdog-datagolf/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        raw = json.loads(r.read().decode())
+    raw = _urlopen_json(url)
     by_name = {ev.get("event_name", ""): ev for ev in raw.get("schedule", [])}
     _SCHED_CACHE.update(ts=now, by_name=by_name)
     return by_name
@@ -101,7 +156,8 @@ PLAY_WINDOW_START = 7   # 7am event-local
 PLAY_WINDOW_END   = 19  # 7pm event-local
 STALE_FRESH_MIN   = 15  # fresh if last_updated within 15 min
 
-def compute_play_status(info: dict, sched_row: dict | None) -> dict:
+def compute_play_status(info: dict, sched_row: dict | None,
+                        tournament_complete: bool = False) -> dict:
     """Returns dict with status emoji, label, location, local time, pause flag."""
     location = (sched_row or {}).get("location") or ""
     tz = event_tz(location)
@@ -116,7 +172,7 @@ def compute_play_status(info: dict, sched_row: dict | None) -> dict:
         age_min = None
 
     sched_status = (sched_row or {}).get("status", "")
-    if sched_status == "completed":
+    if sched_status == "completed" or tournament_complete:
         status, emoji, label = "concluded", "🔴", "Concluded"
     elif age_min is not None and age_min < STALE_FRESH_MIN:
         status, emoji, label = "active", "🟢", "Live"
@@ -279,7 +335,7 @@ def load_picks(dg_tournament: str) -> tuple[dict[str, str], str]:
     path = ROOT / "picks_history.json"
     if not path.exists():
         sys.exit("picks_history.json not found — run parse_picks.py first")
-    data = json.loads(path.read_text())
+    data = json.loads(_read_text_resilient(path))
     known = {r["tournament"] for r in data}
 
     resolved = DG_NAME_MAP.get(dg_tournament)
@@ -303,7 +359,7 @@ def load_standings() -> tuple[list[dict], str]:
     path = ROOT / "standings" / "standings_latest.json"
     if not path.exists():
         sys.exit("standings/standings_latest.json not found — run parse_standings.py first")
-    raw = json.loads(path.read_text())
+    raw = json.loads(_read_text_resilient(path))
     return sorted(raw["entries"], key=lambda e: e["rank"]), raw.get("date", "?")
 
 
@@ -311,9 +367,7 @@ def fetch_inplay() -> tuple[dict, dict]:
     """Fetch DG in-play. Returns (info, {player_name: record})."""
     url = (f"{BASE}/preds/in-play"
            f"?tour=pga&dead_heat=yes&odds_format=percent&file_format=json&key={API_KEY}")
-    req = urllib.request.Request(url, headers={"User-Agent": "jdog-datagolf/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        raw = json.loads(r.read().decode())
+    raw = _urlopen_json(url)
     live = {p["player_name"]: p for p in raw.get("data", [])}
     return raw.get("info", {}), live
 
@@ -328,9 +382,7 @@ def fetch_live_stats(round_str: str = "event") -> dict[str, dict]:
            f"?tour=pga&round={round_str}"
            f"&stat=sg_total,sg_ott,sg_app,sg_arg,sg_putt"
            f"&file_format=json&key={API_KEY}")
-    req = urllib.request.Request(url, headers={"User-Agent": "jdog-datagolf/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        raw = json.loads(r.read().decode())
+    raw = _urlopen_json(url)
     result = {}
     for p in raw.get("rows", []):
         name = p.get("player_name")
@@ -1792,7 +1844,8 @@ function startTicker() {
   if (document.hidden) { setRingPaused(); return; }
   // FR1: if tournament is outside its 7am-7pm event-local play window,
   // poll every 10 min instead of every 2 min and show ⏸ on the ring.
-  const offhours = playState && playState.in_play_window === false;
+  const concluded = playState && playState.status === 'concluded';
+  const offhours = concluded || (playState && playState.in_play_window === false);
   countdown = offhours ? REFRESH_OFFHOURS : REFRESH;
   if (offhours) { setRingPaused(); }
   else { setRing(countdown); }
@@ -2262,7 +2315,15 @@ def build_web_data(args) -> dict:
             sched_row = fetch_schedule().get(tournament)
         except Exception:
             sched_row = None
-    play = compute_play_status(info, sched_row)
+
+    # Auto-pause when every player in the live field has finished R4.
+    # Catches the case where the schedule API hasn't flipped to "completed" yet.
+    tournament_complete = (
+        isinstance(current_round, int) and current_round >= 4
+        and bool(live)
+        and all((p.get("thru") or 0) == 18 for p in live.values())
+    )
+    play = compute_play_status(info, sched_row, tournament_complete=tournament_complete)
 
     return {
         "meta": {
@@ -2302,7 +2363,16 @@ def serve_web(args, port: int = 8765) -> None:
             now = time.time()
             if data_cache["payload"] is not None and now - data_cache["ts"] < DATA_TTL:
                 return data_cache["payload"]
-            payload = build_web_data(args)
+            try:
+                payload = build_web_data(args)
+            except Exception:
+                # On transient failure (iCloud EDEADLK, DG hiccup), serve the last
+                # successful payload if we have one — better stale than 500.
+                if data_cache["payload"] is not None:
+                    import traceback
+                    traceback.print_exc()
+                    return data_cache["payload"]
+                raise
             data_cache["ts"] = now
             data_cache["payload"] = payload
             return payload
@@ -2358,6 +2428,8 @@ def serve_web(args, port: int = 8765) -> None:
                     self.end_headers()
                     self.wfile.write(body)
                 except Exception as exc:
+                    import traceback
+                    traceback.print_exc()
                     err = json.dumps({"error": str(exc)}).encode()
                     self.send_response(500)
                     self.send_header("Content-Type", "application/json")
