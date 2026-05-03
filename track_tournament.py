@@ -1644,8 +1644,20 @@ function setRingLoading() {
   document.getElementById('shimmer').classList.add('on');
 }
 function clearShimmer() { document.getElementById('shimmer').classList.remove('on'); }
+function setRingPaused() {
+  const fill  = document.getElementById('ring-fill');
+  const label = document.getElementById('ring-label');
+  const wrap  = document.querySelector('.ring-wrap');
+  fill.classList.remove('spin');
+  fill.style.strokeDashoffset = 0;
+  fill.style.stroke = '#484f58';
+  label.classList.remove('spin','low');
+  wrap.classList.remove('low');
+  label.textContent = '⏸';
+}
 function startTicker() {
   clearInterval(ticker);
+  if (document.hidden) { setRingPaused(); return; }
   countdown = REFRESH;
   setRing(countdown);
   ticker = setInterval(() => {
@@ -1890,6 +1902,14 @@ function sortBy(th, tableId) {
   rows.forEach(r => tbody.appendChild(r));
 }
 
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearInterval(ticker);
+    if (!loading) setRingPaused();
+  } else if (!loading) {
+    fetchData();
+  }
+});
 document.addEventListener('DOMContentLoaded', fetchData);
 </script>
 </body>

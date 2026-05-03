@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.2 — 2026-05-02
+
+### Live UI
+- Auto-pause live updates when the tab is hidden (`visibilitychange`). Countdown ring shows ⏸ in muted gray; on tab refocus, fetches immediately and resumes the 120s ticker. Saves DG quota when no one's watching.
+
 ## v1.1.1 — 2026-05-02
 
 ### Live UI
