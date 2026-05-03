@@ -30,12 +30,124 @@ import os
 import sys
 import time
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 ROOT      = Path(__file__).parent
 API_KEY   = os.environ.get("DATAGOLF_API_KEY")
 BASE      = "https://feeds.datagolf.com"
 MY_ENTRY  = "TIGER WOODS YALL!"
+
+# US state → IANA tz. Pragmatic single-zone-per-state mapping; PGA venues sit
+# in the dominant zone for every state we visit, so the edge cases (FL panhandle,
+# IN/KY split, ND/SD split, etc.) don't matter in practice.
+US_STATE_TZ = {
+    "AL":"America/Chicago","AK":"America/Anchorage","AZ":"America/Phoenix",
+    "AR":"America/Chicago","CA":"America/Los_Angeles","CO":"America/Denver",
+    "CT":"America/New_York","DE":"America/New_York","FL":"America/New_York",
+    "GA":"America/New_York","HI":"Pacific/Honolulu","ID":"America/Boise",
+    "IL":"America/Chicago","IN":"America/Indiana/Indianapolis","IA":"America/Chicago",
+    "KS":"America/Chicago","KY":"America/New_York","LA":"America/Chicago",
+    "ME":"America/New_York","MD":"America/New_York","MA":"America/New_York",
+    "MI":"America/Detroit","MN":"America/Chicago","MS":"America/Chicago",
+    "MO":"America/Chicago","MT":"America/Denver","NE":"America/Chicago",
+    "NV":"America/Los_Angeles","NH":"America/New_York","NJ":"America/New_York",
+    "NM":"America/Denver","NY":"America/New_York","NC":"America/New_York",
+    "ND":"America/Chicago","OH":"America/New_York","OK":"America/Chicago",
+    "OR":"America/Los_Angeles","PA":"America/New_York","RI":"America/New_York",
+    "SC":"America/New_York","SD":"America/Chicago","TN":"America/Chicago",
+    "TX":"America/Chicago","UT":"America/Denver","VT":"America/New_York",
+    "VA":"America/New_York","WA":"America/Los_Angeles","WV":"America/New_York",
+    "WI":"America/Chicago","WY":"America/Denver","DC":"America/New_York",
+}
+
+# Schedule cache: (timestamp, by_event_name dict). Refresh hourly.
+_SCHED_CACHE: dict = {"ts": 0.0, "by_name": {}}
+
+def fetch_schedule() -> dict[str, dict]:
+    """Return {event_name: schedule_row}, cached for 1 hour."""
+    now = time.time()
+    if _SCHED_CACHE["by_name"] and now - _SCHED_CACHE["ts"] < 3600:
+        return _SCHED_CACHE["by_name"]
+    url = f"{BASE}/get-schedule?tour=pga&file_format=json&key={API_KEY}"
+    req = urllib.request.Request(url, headers={"User-Agent": "jdog-datagolf/1.0"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        raw = json.loads(r.read().decode())
+    by_name = {ev.get("event_name", ""): ev for ev in raw.get("schedule", [])}
+    _SCHED_CACHE.update(ts=now, by_name=by_name)
+    return by_name
+
+def event_tz(location: str | None) -> ZoneInfo:
+    """Parse 'Miami, FL' → ZoneInfo. Falls back to America/New_York."""
+    if location and "," in location:
+        state = location.rsplit(",", 1)[1].strip()[:2].upper()
+        if state in US_STATE_TZ:
+            return ZoneInfo(US_STATE_TZ[state])
+    return ZoneInfo("America/New_York")
+
+def parse_dg_last_update(s: str | None) -> datetime | None:
+    """DG returns local-event time as 'YYYY-MM-DD H:MM PM' (no tz)."""
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d %I:%M %p", "%Y-%m-%d %H:%M:%S UTC", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    return None
+
+PLAY_WINDOW_START = 7   # 7am event-local
+PLAY_WINDOW_END   = 19  # 7pm event-local
+STALE_FRESH_MIN   = 15  # fresh if last_updated within 15 min
+
+def compute_play_status(info: dict, sched_row: dict | None) -> dict:
+    """Returns dict with status emoji, label, location, local time, pause flag."""
+    location = (sched_row or {}).get("location") or ""
+    tz = event_tz(location)
+    now_local = datetime.now(tz)
+    in_window = PLAY_WINDOW_START <= now_local.hour < PLAY_WINDOW_END
+
+    last_update_naive = parse_dg_last_update(info.get("last_update") or info.get("last_updated"))
+    if last_update_naive is not None:
+        last_update_local = last_update_naive.replace(tzinfo=tz)
+        age_min = (now_local - last_update_local).total_seconds() / 60.0
+    else:
+        age_min = None
+
+    sched_status = (sched_row or {}).get("status", "")
+    if sched_status == "completed":
+        status, emoji, label = "concluded", "🔴", "Concluded"
+    elif age_min is not None and age_min < STALE_FRESH_MIN:
+        status, emoji, label = "active", "🟢", "Live"
+    elif in_window and age_min is not None and age_min < 240:
+        status, emoji, label = "lightning", "⚡", "Play suspended"
+    elif not in_window:
+        status, emoji, label = "off-hours", "🔴", "Play paused (overnight)"
+    else:
+        status, emoji, label = "unknown", "🟡", "Status unknown"
+
+    # PT offset for the user (Pacific)
+    pt = ZoneInfo("America/Los_Angeles")
+    pt_offset_hours = int((tz.utcoffset(now_local.replace(tzinfo=None)).total_seconds()
+                           - pt.utcoffset(now_local.replace(tzinfo=None)).total_seconds()) / 3600)
+    pt_offset = f"PT{pt_offset_hours:+d}" if pt_offset_hours else "PT"
+
+    return {
+        "status": status,
+        "emoji": emoji,
+        "label": label,
+        "location": location,
+        "course": (sched_row or {}).get("course", ""),
+        "tz_name": tz.key,
+        "tz_abbr": now_local.strftime("%Z"),
+        "local_time": now_local.strftime("%-I:%M %p"),
+        "pt_offset": pt_offset,
+        "in_play_window": in_window,
+        "last_update_age_min": round(age_min) if age_min is not None else None,
+        "play_window_start_hour": PLAY_WINDOW_START,
+        "play_window_end_hour": PLAY_WINDOW_END,
+    }
 
 if not API_KEY:
     raise SystemExit("Set DATAGOLF_API_KEY first")
@@ -1305,6 +1417,18 @@ body {
 .brand-short { display: none; }
 .header-sep  { color: #484f58; font-weight: 400; }
 .header-meta  { color: #8b949e; font-size: 11px; margin-top: 3px; }
+.status-line {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 5px; font-size: 13px; color: #c9d1d9;
+}
+.status-emoji { font-size: 14px; line-height: 1; }
+.status-emoji.pulse { animation: status-pulse 1.6s ease-in-out infinite; }
+@keyframes status-pulse { 0%,100%{opacity:1;} 50%{opacity:0.45;} }
+.status-tournament { font-weight: 600; color: #fff; }
+.status-loc  { color: #8b949e; }
+.status-loc::before { content: "·"; margin-right: 8px; color: #484f58; }
+.status-time { color: #8b949e; font-variant-numeric: tabular-nums; }
+.status-time::before { content: "·"; margin-right: 8px; color: #484f58; }
 .header-right { display: flex; align-items: center; gap: 14px; }
 .last-fetched { font-size: 11px; color: #8b949e; white-space: nowrap; }
 
@@ -1502,6 +1626,12 @@ tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
       <span class="brand-emoji">🏆</span>
       <span class="header-sep" id="hdr-context"></span>
     </div>
+    <div class="status-line" id="status-line">
+      <span class="status-emoji" id="status-emoji">🟡</span>
+      <span class="status-tournament" id="status-tournament">—</span>
+      <span class="status-loc" id="status-loc"></span>
+      <span class="status-time" id="status-time"></span>
+    </div>
     <div class="header-meta"  id="hdr-meta">Loading…</div>
   </div>
   <div class="header-right">
@@ -1599,7 +1729,9 @@ tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
 
 <script>
 const REFRESH = 120;
+const REFRESH_OFFHOURS = 600;  // 10min poll when tournament is in overnight pause
 let countdown = REFRESH, ticker = null, loading = false;
+let playState = {};
 const prevSnapshot = { pool: {}, tournament: {}, tke: {} };
 function flashIfChanged(tr, key, signature, bucket) {
   const prev = prevSnapshot[bucket][key];
@@ -1658,11 +1790,15 @@ function setRingPaused() {
 function startTicker() {
   clearInterval(ticker);
   if (document.hidden) { setRingPaused(); return; }
-  countdown = REFRESH;
-  setRing(countdown);
+  // FR1: if tournament is outside its 7am-7pm event-local play window,
+  // poll every 10 min instead of every 2 min and show ⏸ on the ring.
+  const offhours = playState && playState.in_play_window === false;
+  countdown = offhours ? REFRESH_OFFHOURS : REFRESH;
+  if (offhours) { setRingPaused(); }
+  else { setRing(countdown); }
   ticker = setInterval(() => {
     countdown--;
-    setRing(countdown);
+    if (!offhours) setRing(countdown);
     if (countdown <= 0) fetchData();
   }, 1000);
 }
@@ -1821,6 +1957,22 @@ function renderAll(data) {
     '👥 ' + m.n_total + ' entries  ·  🛰 DG ' + m.last_update +
     '  ·  📊 standings ' + m.standings_date;
   document.getElementById('last-fetched').textContent = '🕒 ' + m.fetched_at;
+
+  // Status line: emoji · tournament · location · local time (PT offset)
+  const p = m.play || {};
+  playState = p;
+  const emojiEl = document.getElementById('status-emoji');
+  emojiEl.textContent = p.emoji || '🟡';
+  emojiEl.classList.toggle('pulse', p.status === 'lightning' || p.status === 'active');
+  emojiEl.title = p.label || '';
+  document.getElementById('status-tournament').textContent = m.tournament + ' · R' + m.round;
+  document.getElementById('status-loc').textContent = p.location || '';
+  if (p.local_time) {
+    document.getElementById('status-time').textContent =
+      p.local_time + ' ' + (p.tz_abbr || '') + ' (' + (p.pt_offset || 'PT') + ')';
+  } else {
+    document.getElementById('status-time').textContent = '';
+  }
 
   const stale = document.getElementById('banner-stale');
   if (m.standings_stale_days != null && m.standings_stale_days > 14) {
@@ -2104,6 +2256,14 @@ def build_web_data(args) -> dict:
     except Exception:
         pass
 
+    sched_row = None
+    if not args.demo:
+        try:
+            sched_row = fetch_schedule().get(tournament)
+        except Exception:
+            sched_row = None
+    play = compute_play_status(info, sched_row)
+
     return {
         "meta": {
             "tournament":    label,
@@ -2113,6 +2273,7 @@ def build_web_data(args) -> dict:
             "standings_stale_days": stale_days,
             "n_total":       n_total,
             "fetched_at":    time.strftime("%I:%M:%S %p"),
+            "play":          play,
         },
         "pool_entries":    pool_entries,
         "tournament_top":  tournament_top,

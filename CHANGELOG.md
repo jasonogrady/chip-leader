@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.2.0 — 2026-05-02
+
+### Play status & event-local time
+- New `meta.play` block on `/data`: tournament location, course, event-local time, IANA tz, abbreviation (EDT/PDT/etc.), PT offset (e.g. `PT+3`), 7am–7pm play-window flag, last-update age in minutes, and a derived status emoji.
+- Status indicator at the top of the page: 🟢 active (DG data fresh < 15 min), 🔴 play concluded / overnight, 🟡 unknown, ⚡ play suspended (in window but DG stale 15–240 min). Pulses on 🟢/⚡.
+- Header status line shows: `<emoji> <Tournament> · R<n> · <City, State> · <H:MM TZ> (PT±N)`.
+- Schedule data fetched from DG `get-schedule` once per hour; mapped via US-state → IANA tz table (no new deps).
+
+### Auto-pause
+- When event-local time is outside 7am–7pm, client polls every 10 min instead of 2 min and shows ⏸ on the countdown ring (FR1). Combines with the v1.1.2 tab-hidden pause.
+
 ## v1.1.2 — 2026-05-02
 
 ### Live UI
