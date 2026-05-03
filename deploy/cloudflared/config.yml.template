@@ -8,7 +8,7 @@ tunnel: chipleader
 credentials-file: /Users/tensor/.cloudflared/<TUNNEL-ID>.json
 
 ingress:
-  - hostname: chip.ogrady.football
+  - hostname: chip.ogrady.golf
     service: http://localhost:8765
   - service: http_status:404
 

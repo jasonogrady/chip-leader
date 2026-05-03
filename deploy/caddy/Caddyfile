@@ -1,6 +1,6 @@
 # chip-leader · Caddy reverse proxy (OPTIONAL · LAN convenience only)
 #
-# For the public chip.ogrady.football URL, Caddy is no longer used —
+# For the public chip.ogrady.golf URL, Caddy is no longer used —
 # Cloudflare Tunnel handles TLS + auth. See deploy/cloudflared/SETUP.md.
 #
 # This file is kept around only for the LAN convenience case below.

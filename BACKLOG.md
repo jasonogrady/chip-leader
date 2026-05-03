@@ -16,28 +16,28 @@ Gameday-only fork of chip-input. Picking-pipeline backlog stays in chip-input.
 7. **Caddy reverse-proxy** for TLS + clean URL: `chip.local { reverse_proxy localhost:8765 }`. Optional on Phase 1; the bare port is fine.
 8. **Warm-cache cron** (optional) so the page is fresh when first opened on phone Sunday afternoon.
 
-## Mac mini deployment (Phase 2 — chip.ogrady.football) [P0]
+## Mac mini deployment (Phase 2 — chip.ogrady.golf) [P0]
 
-Public URL: **`https://chip.ogrady.football`**, fronted by Cloudflare Tunnel
-so we don't need port forwarding, a static IP, or dynamic DNS. Bluehost stays
-the registrar; Cloudflare takes over DNS for the zone.
+Public URL: **`https://chip.ogrady.golf`**, fronted by Cloudflare Tunnel
+so we don't need port forwarding, a static IP, or dynamic DNS. Namecheap
+stays the registrar; Cloudflare takes over DNS for the zone.
 
 ### One-time setup (in this order)
 
-1. **Cloudflare account.** Free plan. Add the site `ogrady.football` →
-   Cloudflare scans existing Bluehost DNS records and imports them. Verify the
-   imports look right (especially MX for any Bluehost mailboxes).
-2. **Nameserver swap at Bluehost.** Domain Manager → `ogrady.football` →
-   Nameservers → switch from Bluehost's defaults to the two Cloudflare
-   nameservers shown on the CF dashboard. Propagation: usually < 1 hr,
-   sometimes 24. Existing Bluehost web hosting keeps working as long as the
-   imported A/CNAME records are correct on Cloudflare.
+1. **Cloudflare account.** Free plan. Add the site `ogrady.golf` →
+   Cloudflare scans any existing DNS records (likely empty for a fresh
+   Namecheap registration) and presents two assigned nameservers.
+2. **Nameserver swap at Namecheap.** Domain List → `ogrady.golf` → Manage →
+   Nameservers → **Custom DNS** → paste the two Cloudflare nameservers from
+   the CF dashboard. Save. Propagation: usually < 1 hr, sometimes 24.
+   Cloudflare flips the zone to **Active** automatically once it sees the
+   change.
 3. **Mac mini: install cloudflared.**
    ```zsh
    brew install cloudflared
    cloudflared tunnel login          # opens browser, picks the CF zone
    cloudflared tunnel create chipleader
-   cloudflared tunnel route dns chipleader chip.ogrady.football
+   cloudflared tunnel route dns chipleader chip.ogrady.golf
    ```
    The `route dns` step writes the proxied CNAME on Cloudflare automatically
    (`chip → <tunnel-id>.cfargotunnel.com`, orange-cloud on).
@@ -46,7 +46,7 @@ the registrar; Cloudflare takes over DNS for the zone.
    tunnel: chipleader
    credentials-file: /Users/tensor/.cloudflared/<tunnel-id>.json
    ingress:
-     - hostname: chip.ogrady.football
+     - hostname: chip.ogrady.golf
        service: http://localhost:8765
      - service: http_status:404
    ```
@@ -55,15 +55,15 @@ the registrar; Cloudflare takes over DNS for the zone.
    sudo cloudflared service install   # writes a launchd plist + starts it
    ```
 6. **Auth gate (Cloudflare Access, free for ≤50 users).** Zero Trust →
-   Access → Applications → Add → Self-hosted → `chip.ogrady.football`. Policy:
+   Access → Applications → Add → Self-hosted → `chip.ogrady.golf`. Policy:
    *Allow* if email matches `jason@ogrady.ai` (and any pool members you want).
    Identity provider: One-time PIN (email magic link) — zero account setup
    for guests; or Google SSO if you'd rather.
 7. **Verify.**
    ```zsh
-   curl -I https://chip.ogrady.football/        # → 302 to CF Access login
+   curl -I https://chip.ogrady.golf/        # → 302 to CF Access login
    # complete email PIN once; bookmark on phone
-   curl -I https://chip.ogrady.football/data    # → 200 after auth
+   curl -I https://chip.ogrady.golf/data    # → 200 after auth
    ```
 
 ### Why Cloudflare Tunnel (not Tailscale Funnel + custom domain)
@@ -73,12 +73,16 @@ supported. We'd need Cloudflare or a port-forward + Let's Encrypt setup
 anyway, and Cloudflare Tunnel is the cleanest path: no router config, no
 public IP exposure, free TLS cert, free auth (CF Access).
 
-### Why not stay on Bluehost DNS only
+### Why not stay on Namecheap DNS or move to Bluehost
 
-Bluehost can host an A record for `chip.ogrady.football → <home IP>`, but
-that requires (a) a static IP or dynamic DNS daemon, (b) opening port 443 on
-the router to the Mac mini, and (c) provisioning a Let's Encrypt cert via
-Caddy. Cloudflare Tunnel sidesteps all three.
+Namecheap (or Bluehost shared hosting) can host an A record for
+`chip.ogrady.golf → <home IP>`, but that requires (a) a static IP or
+dynamic DNS daemon, (b) opening port 443 on the router to the Mac mini,
+and (c) provisioning a Let's Encrypt cert via Caddy. Cloudflare Tunnel
+sidesteps all three. Bluehost shared hosting also can't host the live
+tracker itself — it needs a long-running Python daemon with macOS keychain
+access and read access to iCloud-symlinked picks/standings, which only
+makes sense on the Mac mini.
 
 ### Local-only fallback (Phase 1, still works)
 
