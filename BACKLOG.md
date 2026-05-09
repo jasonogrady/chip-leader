@@ -2,6 +2,16 @@
 
 Gameday-only fork of chip-input. Picking-pipeline backlog stays in chip-input.
 
+## Active deploy on `modelhost` iMac (user `tensor`, May 2026)
+
+Phase 1 LAN deploy is **live**: LaunchAgent `com.feitclub.chipleader` serves `*:8765`, reachable at `http://modelhost.local:8765` and `http://192.168.0.172:8765`. Live working tree is `~/chip-leader` (cloned from iCloud); deploy template at `deploy/launchd/com.feitclub.chipleader.plist` still hardcodes `/Users/jason/...` — edit before installing on a new machine.
+
+### Open issues on this deploy
+
+- **Full Disk Access for launchd-spawned `/bin/zsh` and `/usr/bin/python3`**. Without it, `/data` returns `{"error": "[Errno 11] Resource deadlock avoided"}` (EDEADLK on iCloud-symlinked reads). HTML serves fine — the error only hits the data endpoint. Fix: System Settings → Privacy & Security → Full Disk Access → add both binaries; granting FDA to Terminal.app does not propagate. Then `launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader`.
+- **Fallback if FDA doesn't pan out**: periodic copy step (cron or second LaunchAgent) that mirrors the two iCloud files into a non-iCloud cache directory; repoint chip-leader's symlinks at the cache.
+- **GitHub push auth**: remote is `jasonogrady/chip-leader` but local `gh` is logged in as `chipcutstack` — `gh auth switch`/`login` before pushing v1.1.0 and beyond.
+
 ## Mac mini deployment (Phase 1 — LAN)
 
 1. **Prereqs.** `brew install python@3 caddy` (and `poppler` only if PDF parsing is ever added back; not needed for the gameday-only path).

@@ -74,9 +74,29 @@ Where `$ICLOUD` is `~/Library/Mobile Documents/com~apple~CloudDocs`.
 
 ---
 
-## Mac mini deployment
+## Mac mini / iMac deployment
 
 See `BACKLOG.md` → "Mac mini deployment" for the LaunchAgent + Caddy + Tailscale Funnel walkthrough.
+
+### Active deployment on this iMac (`modelhost`, user `tensor`)
+
+- Live working tree: `~/chip-leader` (cloned from this iCloud copy). Edits land in iCloud first, then sync to `~/chip-leader` and `launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader`.
+- LaunchAgent: `~/Library/LaunchAgents/com.feitclub.chipleader.plist`, sets `CHIP_NO_OPEN=1` so `webbrowser.open` is suppressed.
+- LAN URL: `http://modelhost.local:8765` (also `http://192.168.0.172:8765`).
+- Logs: `~/Library/Logs/chip-leader.log`.
+
+### Full Disk Access (required for iCloud reads under launchd)
+
+LaunchAgent-spawned `/bin/zsh` and `/usr/bin/python3` cannot traverse `~/Library/Mobile Documents` without Full Disk Access. Symptoms when missing:
+
+- `getcwd: cannot access parent directories: Operation not permitted` (if WorkingDirectory is in iCloud).
+- `{"error": "[Errno 11] Resource deadlock avoided"}` from `/data` (EDEADLK on iCloud-symlinked reads).
+
+Fix: System Settings → Privacy & Security → Full Disk Access → add **`/bin/zsh`** and **`/usr/bin/python3`** (Cmd+Shift+G to type the paths). Granting FDA to Terminal.app alone does NOT propagate to launchd-spawned children. After granting, kickstart the agent.
+
+### Pushing to GitHub
+
+Remote is `https://github.com/jasonogrady/chip-leader.git`. `gh` on this iMac may be logged in as `chipcutstack`; if so, `git push` returns 403. Run `gh auth switch` (or `gh auth login` to add jasonogrady) before pushing.
 
 ---
 
