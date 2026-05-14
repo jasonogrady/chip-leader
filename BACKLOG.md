@@ -15,7 +15,7 @@ Phase 1 LAN deploy is **live**: LaunchAgent `com.feitclub.chipleader` serves `*:
 
 ### Open issues on this deploy
 
-- **Full Disk Access for launchd-spawned `/bin/zsh` and `/usr/bin/python3`**. Without it, `/data` returns `{"error": "[Errno 11] Resource deadlock avoided"}` (EDEADLK on iCloud-symlinked reads). HTML serves fine — the error only hits the data endpoint. Fix: System Settings → Privacy & Security → Full Disk Access → add both binaries; granting FDA to Terminal.app does not propagate. Then `launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader`.
+- **Full Disk Access for launchd-spawned `/bin/zsh`, `/usr/bin/python3`, and `/bin/cat`**. Without it, `/data` returns `{"error": "[Errno 11] Resource deadlock avoided"}` (EDEADLK on iCloud-symlinked reads) or `subprocess.CalledProcessError: Command '['/bin/cat', '.../picks_history.json']' returned non-zero exit status 1` (the resilient reader shells out to `/bin/cat`). HTML serves fine — the error only hits the data endpoint. Fix: System Settings → Privacy & Security → Full Disk Access → add all three binaries; granting FDA to Terminal.app does not propagate. Then `launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader`.
 - **Fallback if FDA doesn't pan out**: periodic copy step (cron or second LaunchAgent) that mirrors the two iCloud files into a non-iCloud cache directory; repoint chip-leader's symlinks at the cache.
 - **GitHub push auth**: remote is `jasonogrady/chip-leader` but local `gh` is logged in as `chipcutstack` — `gh auth switch`/`login` before pushing v1.1.0 and beyond.
 

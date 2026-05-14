@@ -87,12 +87,13 @@ See `BACKLOG.md` → "Mac mini deployment" for the LaunchAgent + Caddy + Tailsca
 
 ### Full Disk Access (required for iCloud reads under launchd)
 
-LaunchAgent-spawned `/bin/zsh` and `/usr/bin/python3` cannot traverse `~/Library/Mobile Documents` without Full Disk Access. Symptoms when missing:
+LaunchAgent-spawned `/bin/zsh`, `/usr/bin/python3`, and `/bin/cat` cannot traverse `~/Library/Mobile Documents` without Full Disk Access. Symptoms when missing:
 
 - `getcwd: cannot access parent directories: Operation not permitted` (if WorkingDirectory is in iCloud).
 - `{"error": "[Errno 11] Resource deadlock avoided"}` from `/data` (EDEADLK on iCloud-symlinked reads).
+- `subprocess.CalledProcessError: Command '['/bin/cat', '.../picks_history.json']' returned non-zero exit status 1` — the resilient reader in `track_tournament.py` shells out to `/bin/cat` to dodge Python's iCloud EDEADLK, so `/bin/cat` needs its own FDA grant.
 
-Fix: System Settings → Privacy & Security → Full Disk Access → add **`/bin/zsh`** and **`/usr/bin/python3`** (Cmd+Shift+G to type the paths). Granting FDA to Terminal.app alone does NOT propagate to launchd-spawned children. After granting, kickstart the agent.
+Fix: System Settings → Privacy & Security → Full Disk Access → add **`/bin/zsh`**, **`/usr/bin/python3`**, and **`/bin/cat`** (Cmd+Shift+G to type the paths). Granting FDA to Terminal.app alone does NOT propagate to launchd-spawned children. After granting, kickstart the agent.
 
 ### Pushing to GitHub
 
