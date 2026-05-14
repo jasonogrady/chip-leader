@@ -1577,6 +1577,28 @@ body {
 }
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.25; } }
 
+/* ── Braille animations ── */
+.braille-spin {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+  width: 1ch; text-align: center;
+}
+.braille-spin.load    { color: #58a6ff; }
+.braille-spin.ring    { color: #58a6ff; font-size: 11px; }
+.trend {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+  width: 1ch; text-align: center; margin-right: 4px;
+  vertical-align: baseline;
+}
+.trend.up   { color: #3fb950; }
+.trend.down { color: #f85149; }
+.trend.flat { color: #484f58; opacity: 0.5; }
+@keyframes trend-fade { 0% { opacity: 1; } 100% { opacity: 0.55; } }
+.trend.up, .trend.down { animation: trend-fade 30s ease-out forwards; }
+
 /* ── Table ── */
 .tbl-wrap { overflow-x: auto; border-radius: 6px; border: 1px solid #30363d; }
 table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -1601,8 +1623,9 @@ tbody tr.flash td { animation: row-flash 5s ease-out; }
 tbody td { padding: 6px 11px; white-space: nowrap; }
 
 /* Row/cell states */
-tr.me td { color: #d4a843; font-weight: 700; }
-tr.me:hover td { background: #1a1508 !important; }
+tr.me td { color: #d4a843; font-weight: 700; background: #1f1809; }
+tr.me td:first-child { box-shadow: inset 3px 0 0 #d4a843; }
+tr.me:hover td { background: #2a200c !important; }
 tr.tke td { color: #ff6b6b; }
 tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
 .dragon { margin-left: 4px; }
@@ -1709,7 +1732,7 @@ tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
 </div>
 
 <div class="content">
-  <div class="banner banner-load" id="banner-load"><div class="dot"></div>Fetching live data from DataGolf…</div>
+  <div class="banner banner-load" id="banner-load"><span class="braille-spin load">⠋</span>Fetching live data from DataGolf…</div>
   <div class="banner banner-err"  id="banner-err"></div>
   <div class="banner banner-warn" id="banner-stale"></div>
 
@@ -1801,6 +1824,36 @@ function switchTab(btn, id) {
 }
 
 // ── Ring ──────────────────────────────────────────────────────────────────────
+// ── Braille animations ────────────────────────────────────────────────────────
+const BRAILLE_SPIN = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+const BRAILLE_UP   = ['⢀','⢠','⢰','⢸'];
+const BRAILLE_DOWN = ['⠈','⠘','⠸','⢸'];
+let brailleFrame = 0;
+setInterval(() => {
+  brailleFrame = (brailleFrame + 1) % 1000;
+  const sf = BRAILLE_SPIN[brailleFrame % BRAILLE_SPIN.length];
+  document.querySelectorAll('.braille-spin').forEach(el => { el.textContent = sf; });
+  document.querySelectorAll('.trend.up').forEach(el => {
+    el.textContent = BRAILLE_UP[brailleFrame % BRAILLE_UP.length];
+  });
+  document.querySelectorAll('.trend.down').forEach(el => {
+    el.textContent = BRAILLE_DOWN[brailleFrame % BRAILLE_DOWN.length];
+  });
+}, 120);
+
+const lastScoreTournament = {};
+const lastScoreTKE        = {};
+function trendCls(prev, cur) {
+  if (prev === undefined || prev === null || cur === null || cur === undefined) return 'flat';
+  if (cur < prev) return 'up';
+  if (cur > prev) return 'down';
+  return 'flat';
+}
+function trendSpan(cls) {
+  const glyph = cls === 'up' ? '⢀' : cls === 'down' ? '⠈' : '·';
+  return '<span class="trend ' + cls + '">' + glyph + '</span>';
+}
+
 function setRing(secs) {
   const fill  = document.getElementById('ring-fill');
   const label = document.getElementById('ring-label');
@@ -1938,8 +1991,9 @@ function renderTournament(players, myPick) {
     flashIfChanged(tr, p.player, p.pos + '|' + p.score + '|' + p.today, 'tournament');
     const sv  = p.score !== null && p.score !== undefined ? p.score : 999;
     const tv  = p.today !== null && p.today !== undefined ? p.today : 999;
+    const tcls = trendCls(lastScoreTournament[p.player], p.score);
     tr.appendChild(td(p.pos || '—', ''));
-    tr.appendChild(td(p.player,     ''));
+    tr.appendChild(td(trendSpan(tcls) + escapeHtml(p.player), ''));
     tr.appendChild(td(fmtScore(p.score), 'r ' + scoreCls(p.score), sv));
     tr.appendChild(td(fmtThru(p.thru),   'r', p.thru !== null ? p.thru : 99));
     tr.appendChild(td(fmtScore(p.today), 'r ' + scoreCls(p.today), tv));
@@ -1950,6 +2004,7 @@ function renderTournament(players, myPick) {
     tr.appendChild(td(fmtPct(p.make_cut), mc,  -(p.make_cut || 0)));
     tbody.appendChild(tr);
   });
+  players.forEach(p => { lastScoreTournament[p.player] = p.score; });
 }
 
 // ── TKE table ─────────────────────────────────────────────────────────────────
@@ -1963,10 +2018,11 @@ function renderTKE(rows) {
     flashIfChanged(tr, r.entry, r.proj + '|' + r.score, 'tke');
     const sv = r.score !== null && r.score !== undefined ? r.score : 999;
     const entryLabel = escapeHtml(r.entry) + '<span class="dragon">🐉</span>';
+    const tcls = trendCls(lastScoreTKE[r.entry], r.score);
     tr.appendChild(td(i + 1,               'r',  i + 1));
     tr.appendChild(td(entryLabel,          ''));
     tr.appendChild(td(r.alias || '—',      ''));
-    tr.appendChild(td(fmtGolfer(r.pick),   '',   r.pick, r.pick));
+    tr.appendChild(td(trendSpan(tcls) + fmtGolfer(r.pick), '', r.pick, r.pick));
     tr.appendChild(td(fmtScore(r.score),   'r ' + scoreCls(r.score), sv));
     tr.appendChild(td(r.pos || '—',        ''));
     tr.appendChild(td('#' + r.proj,        'r',  r.proj));
@@ -1979,6 +2035,7 @@ function renderTKE(rows) {
     tr.appendChild(td(fmtPct(r.win_pct),   wc,  -(r.win_pct || 0)));
     tbody.appendChild(tr);
   });
+  rows.forEach(r => { lastScoreTKE[r.entry] = r.score; });
 }
 
 // ── Narrative ─────────────────────────────────────────────────────────────────
@@ -2056,7 +2113,7 @@ function fetchData() {
   bl.classList.add('visible');
   be.classList.remove('visible');
   btn.disabled = true;
-  btn.textContent = 'Updating…';
+  btn.innerHTML = '<span class="braille-spin load">⠋</span> Updating';
 
   fetch('/data')
     .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -2210,19 +2267,26 @@ def build_web_data(args) -> dict:
     # Tournament top 25
     live_sorted = sorted(live.values(),
                          key=lambda p: (p.get("current_score", 0), p.get("player_name", "")))
-    tournament_top = []
-    for p in live_sorted[:25]:
-        today = _today_with_fallback(p, current_round)
-        tournament_top.append({
+    def _tournament_row(p):
+        return {
             "pos":      p.get("current_pos", ""),
             "player":   p.get("player_name", ""),
             "score":    p.get("current_score"),
             "thru":     p.get("thru"),
-            "today":    today,
+            "today":    _today_with_fallback(p, current_round),
             "win_pct":  p.get("win"),
             "top10":    p.get("top_10"),
             "make_cut": p.get("make_cut"),
-        })
+        }
+
+    tournament_top = [_tournament_row(p) for p in live_sorted[:25]]
+
+    # Always include my pick, even if outside the top-25 window
+    my_pick = entry_pick.get(args.my_entry)
+    if my_pick and not any(r["player"] == my_pick for r in tournament_top):
+        my_player = live.get(my_pick)
+        if my_player:
+            tournament_top.append(_tournament_row(my_player))
 
     # TKE rows
     alias_map = {e: a for e, a in TKE_GROUP if a}

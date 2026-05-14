@@ -2,6 +2,13 @@
 
 Gameday-only fork of chip-input. Picking-pipeline backlog stays in chip-input.
 
+## Recently shipped (v1.4.0, 2026-05-14)
+
+- **Always show my pick on Tournament tab** — appended outside top-25 if necessary; `.me` row visually pops (background + border + bold gold).
+- **Braille activity spinners** — banner-load + Update button animate (⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏) while fetching.
+- **Trend animations per player** — top-25 + TKE rows show braille up/down indicator vs. previous refresh; 30s fade.
+- **Forked file reunited** — chip-input's `track_tournament.py` symlinked to this repo's. End of fork divergence.
+
 ## Active deploy on `modelhost` iMac (user `tensor`, May 2026)
 
 Phase 1 LAN deploy is **live**: LaunchAgent `com.feitclub.chipleader` serves `*:8765`, reachable at `http://modelhost.local:8765` and `http://192.168.0.172:8765`. Live working tree is `~/chip-leader` (cloned from iCloud); deploy template at `deploy/launchd/com.feitclub.chipleader.plist` still hardcodes `/Users/jason/...` — edit before installing on a new machine.
@@ -120,9 +127,9 @@ the router NAT.
 
 ## Outstanding leaderboard polish (carried over from chip-input)
 
-- `today` fallback when DG returns null mid-round (compute as `current_score − Σ prior_round_totals`).
+- ~~`today` fallback when DG returns null mid-round (compute as `current_score − Σ prior_round_totals`).~~ — done in v1.1.1 (`_today_with_fallback`).
 - ETag / 304 on `/data` keyed on `meta.last_update`.
-- Row-change flash (5s yellow fade) when score/rank changes between polls.
+- ~~Row-change flash (5s yellow fade) when score/rank changes between polls.~~ — done in v1.1.1 (`flashIfChanged` + `row-flash` keyframe).
 - Cut-watch badge for entries whose pick has make_cut < 0.7.
 - Round selector — flip leaderboards across R1/R2/R3/R4.
 - SSE push (server fetches DG, pushes diffs) instead of 120s client poll.

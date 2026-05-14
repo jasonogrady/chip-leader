@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.4.0 — 2026-05-14
+
+### Tournament tab — always show my pick
+- `tournament_top` now always includes the user's pick row, even when the player is outside the top-25 by score. Refactored to `_tournament_row()` helper and appends my-pick row if absent.
+- `.me` row styling upgraded: gold text + 700 weight (existing) **+** dark-gold row background (`#1f1809`) + 3px gold inset border on the first cell. Stands out from the regular gold-Win% cells which previously made the `.me` row easy to miss in a busy table.
+
+### Braille activity & trend animations
+- New `.braille-spin` class drives a 10-frame Unicode braille spinner (⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏, 120ms cadence) via a single global `setInterval` that mutates every `.braille-spin` element's `textContent`.
+- Banner-load indicator: replaced the blue pulsing dot with an inline braille spinner ("⠋ Fetching live data from DataGolf…").
+- Update Now button shows "⠋ Updating" while a `/data` fetch is in-flight.
+- Ring countdown indicator left as-is (⛳ + shimmer is more on-theme for golf than braille).
+- **Per-player trend indicators** on the Tournament tab (top 25 + my-pick row) and TKE leaderboard. A small braille glyph prefixes each player name:
+  - **Up** (score improved between refreshes — `cur < prev`): green ascending fill (⢀⢠⢰⢸)
+  - **Down** (score worsened — `cur > prev`): red descending fill (⠈⠘⠸⢸)
+  - **Flat** (no change or first render): faint `·`
+  - 30s `trend-fade` keyframe drops opacity to 55% so changes are obvious right after a refresh but recede over time. `lastScoreTournament` and `lastScoreTKE` JS objects retain prior scores; reset on full page reload.
+
+### Forked file reunited
+- chip-input's `track_tournament.py` is now a **symlink** to this repo's copy (was a stale 2190-line fork; this repo is 2530+ lines). One file, no more drift. Going forward, edit only here.
+
 ## v1.3.0 — 2026-05-03
 
 ### Fix — HTTP 500 on /data
