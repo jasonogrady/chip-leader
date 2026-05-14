@@ -74,11 +74,11 @@ Where `$ICLOUD` is `~/Library/Mobile Documents/com~apple~CloudDocs`.
 
 ---
 
-## Mac mini / iMac deployment
+## Mac mini deployment
 
 See `BACKLOG.md` → "Mac mini deployment" for the LaunchAgent + Caddy + Tailscale Funnel walkthrough.
 
-### Active deployment on this iMac (`modelhost`, user `tensor`)
+### Active deployment on this Mac mini (`modelhost`, user `tensor`)
 
 - Live working tree: `~/chip-leader` (cloned from this iCloud copy). Edits land in iCloud first, then sync to `~/chip-leader` and `launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader`.
 - LaunchAgent: `~/Library/LaunchAgents/com.feitclub.chipleader.plist`, sets `CHIP_NO_OPEN=1` so `webbrowser.open` is suppressed.
@@ -96,7 +96,7 @@ Fix: System Settings → Privacy & Security → Full Disk Access → add **`/bin
 
 ### Pushing to GitHub
 
-Remote is `https://github.com/jasonogrady/chip-leader.git`. `gh` on this iMac may be logged in as `chipcutstack`; if so, `git push` returns 403. Run `gh auth switch` (or `gh auth login` to add jasonogrady) before pushing.
+Remote is `https://github.com/jasonogrady/chip-leader.git`. `gh` on this Mac mini may be logged in as `chipcutstack`; if so, `git push` returns 403. Run `gh auth switch` (or `gh auth login` to add jasonogrady) before pushing.
 
 ---
 

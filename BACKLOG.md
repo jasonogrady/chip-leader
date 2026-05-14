@@ -9,7 +9,7 @@ Gameday-only fork of chip-input. Picking-pipeline backlog stays in chip-input.
 - **Trend animations per player** — top-25 + TKE rows show braille up/down indicator vs. previous refresh; 30s fade.
 - **Forked file reunited** — chip-input's `track_tournament.py` symlinked to this repo's. End of fork divergence.
 
-## Active deploy on `modelhost` iMac (user `tensor`, May 2026)
+## Active deploy on `modelhost` Mac Mini (user `tensor`, May 2026)
 
 Phase 1 LAN deploy is **live**: LaunchAgent `com.feitclub.chipleader` serves `*:8765`, reachable at `http://modelhost.local:8765` and `http://192.168.0.172:8765`. Live working tree is `~/chip-leader` (cloned from iCloud); deploy template at `deploy/launchd/com.feitclub.chipleader.plist` still hardcodes `/Users/jason/...` — edit before installing on a new machine.
 
