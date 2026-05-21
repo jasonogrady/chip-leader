@@ -2514,9 +2514,8 @@ def serve_web(args, port: int = 8765) -> None:
     else:
         raise SystemExit(f"No free port found near {port}")
     try:
-        host = socket.gethostname()
-        if not host.endswith(".local"):
-            host = f"{host}.local"
+        host = socket.gethostname().split(".")[0]
+        host = f"{host}.local"
     except Exception:
         host = "localhost"
     url = f"http://{host}:{port}"
