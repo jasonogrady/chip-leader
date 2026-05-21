@@ -2,6 +2,37 @@
 
 Gameday-only fork of chip-input. Picking-pipeline backlog stays in chip-input.
 
+## Gameday playbook — CJ Cup Byron Nelson (Thu 2026-05-21)
+
+**Current state (end of night 2026-05-20):**
+- Hostname-normalization fix committed (`325f80c`) and pushed.
+- modelhost is live at `http://modelhost.local:8765` — `/` and `/data` both 200, FDA grants intact.
+- Picks PDF for this week: **not yet dropped**. User will save it to `chip-input/picks/w{N}.pdf` Thursday AM; chip-input pipeline rewrites `picks_history.json` and iCloud syncs it to modelhost. No chip-leader restart needed — next 120s refresh picks it up.
+- Cloudflare zone `ogrady.golf` added under "JDOGs account"; Namecheap nameservers swapped to the two `*.ns.cloudflare.com` values on 2026-05-20 ~midnight PT. Awaiting CF "zone Active" email (typical 30 min – 4 hr; worst case 48 hr).
+
+### Order of operations for tomorrow ("tell me what to do")
+
+1. **First tee fallback (always works):** open `http://modelhost.local:8765` on phone/laptop. Done. No DNS required.
+2. **On modelhost — pull the hostname fix** (one time):
+   ```zsh
+   ssh tensor@modelhost.local
+   cd ~/chip-leader && git pull
+   launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader
+   ```
+3. **When CF zone goes Active** (check with `dig NS ogrady.golf +short` — should return the two `*.ns.cloudflare.com` values), set up the tunnel on modelhost per Phase 2 steps 3–7 below.
+4. **After picks PDF lands:** confirm `picks_history.json` mtime updates, then `curl -s http://modelhost.local:8765/data | python3 -m json.tool | head -40` — `meta.tournament` should flip to the Byron Nelson and `pool_entries` should populate.
+
+### Known smoke-test commands
+```zsh
+# LAN health
+curl -sS -o /dev/null -w "%{http_code} %{time_total}s\n" http://modelhost.local:8765/
+curl -sS http://modelhost.local:8765/data | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['meta']['tournament'], d['meta']['play']['status'])"
+
+# DNS propagation
+dig NS ogrady.golf +short
+dig chip.ogrady.golf +short   # only resolves after `cloudflared tunnel route dns` runs
+```
+
 ## Recently shipped (v1.4.0, 2026-05-14)
 
 - **Always show my pick on Tournament tab** — appended outside top-25 if necessary; `.me` row visually pops (background + border + bold gold).
