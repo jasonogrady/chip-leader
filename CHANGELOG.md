@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.7.0 — 2026-05-23
+
+### Custom 404 page (brutalist VHS / "Chip's closed" gag)
+- New cream-paper / Bowlby-One 404 page leaning into the *National Lampoon's Vacation* "Sorry folks, park's closed" bit: meme-captioned security-guard photo on the left (with REC indicator, scanlines, vignette), giant 404 with a red jiggling middle "0" on the right, blurb, and a single "⏰ Wake up the admin" CTA. Replaces the previous empty 404 body.
+- Routes: `GET /404` returns 200 + page (testable preview); any unknown path returns 404 + page. The existing `/`, `/data`, and icon routes are untouched.
+- Static-file branch: `GET /assets/<path>` serves files from `./assets/` with proper Content-Type and `Cache-Control: public, max-age=86400`. Path-traversal-guarded: resolved target must stay inside `ROOT/assets`. Encoded `..%2F` and `%2e%2e` confirmed blocked.
+- Self-hosted Google Fonts (Bowlby One 400, DM Mono 400/500, Instrument Serif 400 italic) under `assets/fonts/`, latin subset only (~55 KB total). No runtime third-party requests from this page.
+- "Sent!" modal uses the browser-native `<dialog>` + `.showModal()`, which provides focus trap, Escape-to-close, and focus return to the trigger for free. Scrim click handled by `event.target === dlg`; backdrop styled via `dialog::backdrop`.
+- `notifyAdmin()` stubbed with a TODO. Modal fires unconditionally on click; wire to a real notification channel later (Slack, PagerDuty, email).
+- Looping animations (REC blink, "0" jiggle, alarm wiggle) gated behind `@media (prefers-reduced-motion: reduce)`. One-shot pop-ins kept enabled.
+- Design handoff and prototype kept untouched at `design_handoff_404_page/` as reference.
+
 ## v1.6.0 — 2026-05-23
 
 ### Data-provider scrub

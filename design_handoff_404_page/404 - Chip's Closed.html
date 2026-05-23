@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>404 — Chip's Closed</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="scene.css" />
+  <style>
+    html, body { margin: 0; background: #2a2622; font-family: 'DM Mono', ui-monospace, monospace; }
+  </style>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="scene.jsx"></script>
+  <script type="text/babel" data-presets="react">
+    const Canvas = window.DesignCanvas;
+    const Section = window.DCSection;
+    const Artboard = window.DCArtboard;
+
+    const App = () => (
+      <Canvas title="404 — Chip's closed" subtitle="An error page featuring our friend the security guard">
+        <Section id="screens" title="Responsive 404">
+          <Artboard id="desktop" label="Desktop · 1440 × 900" width={1440} height={900}>
+            <Scene variant="desktop" />
+          </Artboard>
+          <Artboard id="mobile" label="Mobile · 390 × 844" width={390} height={844}>
+            <Scene variant="mobile" />
+          </Artboard>
+        </Section>
+      </Canvas>
+    );
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

@@ -2196,6 +2196,536 @@ document.addEventListener('DOMContentLoaded', fetchData);
 </html>"""
 
 
+# Brutalist 404 page — ported from design_handoff_404_page/scene.{jsx,css}.
+# Vanilla HTML/CSS/JS to match the rest of this app; uses the native <dialog>
+# element for the "Sent!" modal so we get focus trap, Escape-to-close, and
+# focus return for free.
+_HTML_404_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>404 · Chip's Closed</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<meta name="theme-color" content="#efe6d2">
+<style>
+@font-face {
+  font-family: 'Bowlby One';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/BowlbyOne-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/DMMono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/assets/fonts/DMMono-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/InstrumentSerif-400i.woff2') format('woff2');
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: #efe6d2;
+  color: #1a1410;
+  font-family: 'DM Mono', ui-monospace, Menlo, monospace;
+  min-height: 100vh;
+}
+
+.scene {
+  --paper: #efe6d2;
+  --paper-deep: #e3d6b3;
+  --ink: #1a1410;
+  --ink-soft: #4a3e30;
+  --accent: #c83a1d;
+  --moss: #2f4a2a;
+  --rule: rgba(26, 20, 16, 0.18);
+  font-family: 'DM Mono', ui-monospace, Menlo, monospace;
+  color: var(--ink);
+  background: var(--paper);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+/* paper grain */
+.scene::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(rgba(120, 90, 40, 0.08) 1px, transparent 1px),
+    radial-gradient(rgba(60, 40, 20, 0.06) 1px, transparent 1px);
+  background-size: 3px 3px, 7px 7px;
+  background-position: 0 0, 1px 2px;
+  pointer-events: none;
+  z-index: 0;
+  mix-blend-mode: multiply;
+  opacity: 0.85;
+}
+/* horizontal hairline rules across the whole scene */
+.scene::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(to bottom,
+    transparent 0,
+    transparent calc(100% - 1px),
+    rgba(26, 20, 16, 0.12) 100%
+  );
+  background-size: 100% 28px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---------------- PHOTO ---------------- */
+.photo {
+  position: relative;
+  overflow: hidden;
+  background: #1a1410;
+  z-index: 1;
+  border-right: 1px solid var(--ink);
+}
+.photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(0.9) contrast(1.05) brightness(0.95);
+}
+.scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0,0,0,0)   0,
+    rgba(0,0,0,0)   2px,
+    rgba(0,0,0,0.18) 3px,
+    rgba(0,0,0,0)   4px
+  );
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+.vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+  pointer-events: none;
+}
+.rec {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: #f4efe2;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.7);
+}
+.rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(200, 58, 29, 0.8);
+  animation: rec-blink 1.2s steps(2) infinite;
+}
+@keyframes rec-blink { 50% { opacity: 0.25; } }
+.tape-meta {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: #f4efe2;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.7);
+  opacity: 0.85;
+}
+.meme {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: Impact, 'Haettenschweiler', 'Arial Narrow Bold', 'Oswald', sans-serif;
+  font-weight: 400;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+  line-height: 1.0;
+  text-transform: uppercase;
+  padding: 0 6%;
+  font-size: 64px;
+  text-shadow:
+     2px  2px 0 #000,  -2px -2px 0 #000,
+     2px -2px 0 #000,  -2px  2px 0 #000,
+     3px  0   0 #000,  -3px  0   0 #000,
+     0    3px 0 #000,   0   -3px 0 #000;
+  -webkit-text-stroke: 2px #000;
+  paint-order: stroke fill;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.6);
+  animation: meme-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.meme-top    { top: 5%;    animation-delay: 0.35s; }
+.meme-bottom { bottom: 5%; animation-delay: 1.10s; }
+@keyframes meme-pop {
+  0%   { opacity: 0; transform: scale(0.5) rotate(-2deg); }
+  60%  { opacity: 1; transform: scale(1.08) rotate(1deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+/* ---------------- PANEL ---------------- */
+.panel {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 64px 72px;
+  gap: 32px;
+}
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.eyebrow-block { width: 22px; height: 10px; background: var(--accent); }
+
+.page-num {
+  font-family: 'Bowlby One', 'Arial Black', sans-serif;
+  font-weight: 400;
+  font-size: 280px;
+  line-height: 0.85;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+  margin: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+.page-num .d { display: inline-block; }
+.page-num .zero {
+  color: var(--accent);
+  transform: translateY(-0.02em);
+  animation: jiggle 4s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes jiggle {
+  0%, 88%, 100% { transform: translateY(-0.02em) rotate(0deg); }
+  90% { transform: translateY(-0.02em) rotate(-3deg); }
+  94% { transform: translateY(-0.02em) rotate(3deg); }
+  98% { transform: translateY(-0.02em) rotate(0deg); }
+}
+
+.blurb {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  color: var(--ink-soft);
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.55;
+  max-width: 56ch;
+  text-wrap: pretty;
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 20px;
+  align-items: center;
+  margin-top: 4px;
+}
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  text-decoration: none;
+  font-family: 'DM Mono', monospace;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  font-size: 15px;
+  padding: 18px 28px;
+  border: 2px solid var(--ink);
+  transition: transform 0.15s ease, background 0.15s ease;
+  cursor: pointer;
+  position: relative;
+}
+.cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--ink);
+  transform: translate(6px, 6px);
+  z-index: -1;
+  background: var(--moss);
+  transition: transform 0.15s ease;
+}
+.cta:hover  { transform: translate(2px, 2px); }
+.cta:hover::after { transform: translate(4px, 4px); }
+.cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.cta-emoji {
+  font-family: 'DM Mono', monospace;
+  display: inline-block;
+  font-size: 1.1em;
+  animation: alarm-wiggle 2.4s ease-in-out infinite;
+  transform-origin: 50% 40%;
+}
+@keyframes alarm-wiggle {
+  0%, 80%, 100% { transform: rotate(0); }
+  84% { transform: rotate(-18deg); }
+  88% { transform: rotate(16deg); }
+  92% { transform: rotate(-12deg); }
+  96% { transform: rotate(8deg); }
+}
+
+.signoff {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  border-top: 1px dashed var(--rule);
+  padding-top: 18px;
+  margin-top: auto;
+}
+.signoff::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+}
+
+/* ---------------- MODAL (native <dialog>) ---------------- */
+.sent-dialog {
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  padding: 32px 32px 24px;
+  width: min(420px, 86%);
+  max-width: none;
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  text-align: center;
+  box-shadow: 8px 8px 0 var(--accent);
+  font-family: 'DM Mono', monospace;
+}
+.sent-dialog[open] {
+  animation: modal-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.sent-dialog::backdrop {
+  background: rgba(20, 14, 10, 0.55);
+  backdrop-filter: blur(2px);
+  animation: scrim-in 0.18s ease-out;
+}
+@keyframes scrim-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-in {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.92); }
+  100% { opacity: 1; transform: translateY(0)   scale(1); }
+}
+.modal-icon {
+  font-size: 44px;
+  line-height: 1;
+  margin-bottom: 14px;
+  display: inline-block;
+  animation: alarm-wiggle 1.4s ease-in-out infinite;
+  transform-origin: 50% 40%;
+}
+.modal-title {
+  font-family: 'Bowlby One', sans-serif;
+  font-weight: 400;
+  font-size: 36px;
+  line-height: 1;
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+.modal-body {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 18px;
+  color: var(--ink-soft);
+  margin-bottom: 22px;
+  text-wrap: pretty;
+}
+.modal-close {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  background: var(--ink);
+  color: var(--paper);
+  border: 2px solid var(--ink);
+  padding: 10px 22px;
+  cursor: pointer;
+}
+.modal-close:hover { background: var(--accent); border-color: var(--accent); }
+.modal-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ---------------- MOBILE ---------------- */
+@media (max-width: 768px) {
+  .scene {
+    grid-template-columns: 1fr;
+  }
+  .photo {
+    height: 340px;
+    border-right: none;
+    border-bottom: 1px solid var(--ink);
+  }
+  .rec { font-size: 11px; top: 14px; left: 14px; }
+  .rec-dot { width: 8px; height: 8px; }
+  .tape-meta { font-size: 10px; top: 14px; right: 14px; gap: 5px; }
+  .meme { font-size: 28px; }
+  .panel { padding: 28px 24px 32px; gap: 18px; }
+  .eyebrow { font-size: 10px; gap: 8px; }
+  .eyebrow-block { width: 16px; height: 8px; }
+  .page-num { font-size: 128px; gap: 2px; }
+  .blurb { font-size: 12px; line-height: 1.5; }
+  .cta-row { gap: 10px 12px; flex-direction: column; align-items: stretch; }
+  .cta { padding: 14px 18px; font-size: 12px; justify-content: center; }
+  .signoff { font-size: 11px; padding-top: 14px; }
+  .sent-dialog { padding: 26px 22px 20px; }
+  .modal-title { font-size: 30px; }
+  .modal-body { font-size: 16px; }
+}
+
+/* ---------------- REDUCED MOTION ---------------- */
+@media (prefers-reduced-motion: reduce) {
+  .rec-dot,
+  .page-num .zero,
+  .cta-alt .cta-emoji,
+  .cta .cta-emoji,
+  .modal-icon {
+    animation: none;
+  }
+}
+</style>
+</head>
+<body>
+<main class="scene" role="main">
+  <div class="photo">
+    <img src="/assets/guard.jpeg" alt="A confused security guard">
+    <div class="scanlines" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="rec" aria-hidden="true">
+      <span class="rec-dot"></span>
+      <span class="rec-label">REC</span>
+      <span class="rec-time" id="rec-time">00:00:00</span>
+    </div>
+    <div class="tape-meta" aria-hidden="true">
+      <span>CH-04</span><span>·</span><span>SP</span><span>·</span><span>EP</span>
+    </div>
+    <div class="meme meme-top" aria-hidden="true">SORRY FOLKS, CHIP'S CLOSED</div>
+    <div class="meme meme-bottom" aria-hidden="true">MOOSE OUT FRONT SHOULDA TOLD YA</div>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">
+      <span class="eyebrow-block" aria-hidden="true"></span>
+      <span>Error · four · zero · four</span>
+    </div>
+    <h1 class="page-num" aria-label="404">
+      <span class="d" aria-hidden="true">4</span><span class="d zero" aria-hidden="true">0</span><span class="d" aria-hidden="true">4</span>
+    </h1>
+    <p class="blurb">
+      Chip Leader auto-updates during the live tournament, Thursday to Sunday. Otherwise you'll see the most recent stats. If you're seeing this page, something went wrong. The admin has been notified. If it's something serious, click the button:
+    </p>
+    <div class="cta-row">
+      <button type="button" class="cta cta-alt" id="wake-btn">
+        <span class="cta-emoji" aria-hidden="true">⏰</span>
+        <span class="cta-label">Wake up the admin</span>
+      </button>
+    </div>
+    <div class="signoff">chip-leader, an ogrady joint</div>
+  </div>
+</main>
+
+<dialog class="sent-dialog" id="sent-dialog" aria-labelledby="sent-title">
+  <div class="modal-icon" aria-hidden="true">⏰</div>
+  <div class="modal-title" id="sent-title">Sent!</div>
+  <div class="modal-body">We rang the admin. They&rsquo;re presumably looking for the moose.</div>
+  <button type="button" class="modal-close" id="sent-ok" autofocus>OK</button>
+</dialog>
+
+<script>
+(function () {
+  // REC ticker — counts seconds since page load, formatted 00:MM:SS.
+  var start = Date.now();
+  var rec = document.getElementById('rec-time');
+  function tickRec() {
+    var t = Math.floor((Date.now() - start) / 1000);
+    var mm = String(Math.floor(t / 60)).padStart(2, '0');
+    var ss = String(t % 60).padStart(2, '0');
+    rec.textContent = '00:' + mm + ':' + ss;
+  }
+  tickRec();
+  setInterval(tickRec, 1000);
+
+  // TODO: wire to a real notification channel (Slack webhook, email,
+  // PagerDuty, etc.). Open questions tracked in
+  // design_handoff_404_page/README.md "Open questions for product / backend".
+  function notifyAdmin() {
+  }
+
+  var dlg = document.getElementById('sent-dialog');
+  var wake = document.getElementById('wake-btn');
+  var ok = document.getElementById('sent-ok');
+
+  wake.addEventListener('click', function () {
+    notifyAdmin();
+    if (typeof dlg.showModal === 'function') {
+      dlg.showModal();
+    } else {
+      dlg.setAttribute('open', '');
+    }
+  });
+
+  ok.addEventListener('click', function () { dlg.close(); });
+
+  // Scrim click: native <dialog> backdrop clicks fire on the dialog element
+  // itself. Differentiate by checking the click target equals the dialog.
+  dlg.addEventListener('click', function (e) {
+    if (e.target === dlg) dlg.close();
+  });
+})();
+</script>
+</body>
+</html>"""
+
+
 def _strip_ansi(s: str) -> str:
     import re
     return re.sub(r'\033\[[0-9;]*m', '', s)
@@ -2490,6 +3020,15 @@ def serve_web(args, port: int = 8765) -> None:
                 self.send_header("Cache-Control", "public, max-age=86400")
                 self.end_headers()
                 self.wfile.write(svg)
+            elif path == "/404":
+                body = _HTML_404_PAGE.encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", len(body))
+                self.end_headers()
+                self.wfile.write(body)
+            elif path.startswith("/assets/"):
+                self._serve_asset(path)
             elif path == "/data":
                 try:
                     data = get_cached_data()
@@ -2520,8 +3059,47 @@ def serve_web(args, port: int = 8765) -> None:
                     self.end_headers()
                     self.wfile.write(err)
             else:
+                body = _HTML_404_PAGE.encode()
                 self.send_response(404)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", len(body))
                 self.end_headers()
+                self.wfile.write(body)
+
+        # Static files under ./assets/. Path-traversal guarded by resolving and
+        # confirming the resolved path stays inside ROOT/assets.
+        _ASSET_TYPES = {
+            ".jpeg": "image/jpeg",
+            ".jpg":  "image/jpeg",
+            ".png":  "image/png",
+            ".svg":  "image/svg+xml",
+            ".woff2": "font/woff2",
+            ".woff":  "font/woff",
+            ".css":  "text/css; charset=utf-8",
+        }
+
+        def _serve_asset(self, path: str) -> None:
+            assets_root = (ROOT / "assets").resolve()
+            rel = path[len("/assets/"):]
+            try:
+                target = (assets_root / rel).resolve()
+            except (OSError, ValueError):
+                self.send_response(404); self.end_headers(); return
+            if assets_root not in target.parents and target != assets_root:
+                self.send_response(404); self.end_headers(); return
+            if not target.is_file():
+                self.send_response(404); self.end_headers(); return
+            ctype = self._ASSET_TYPES.get(target.suffix.lower(), "application/octet-stream")
+            try:
+                data = target.read_bytes()
+            except OSError:
+                self.send_response(404); self.end_headers(); return
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", len(data))
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(data)
 
     for attempt in range(10):
         try:
