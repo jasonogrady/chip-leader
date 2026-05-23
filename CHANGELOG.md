@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.8.0 — 2026-05-23
+
+### Fix — "Sent!" modal renders unstyled
+- The native `<dialog>` is a sibling of `<main class="scene">`, so when promoted to the top-layer by `showModal()` it could not resolve `var(--paper)`, `var(--ink)`, etc. — the tokens were defined on `.scene` and didn't cascade. Result: transparent background, missing border, missing red offset shadow — the "Sent!" text floated on top of the page.
+- Fix: moved the seven design tokens (`--paper`, `--paper-deep`, `--ink`, `--ink-soft`, `--accent`, `--moss`, `--rule`) from `.scene` to `:root`. `.scene`'s own declarations (font, grid, isolation) are untouched. Verified post-fix: cream paper background, 2px ink border, 8×8 red offset shadow, `::backdrop` scrim with `blur(2px)` all render per the design handoff.
+
 ## v1.7.0 — 2026-05-23
 
 ### Custom 404 page (brutalist VHS / "Chip's closed" gag)

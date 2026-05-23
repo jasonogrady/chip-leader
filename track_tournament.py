@@ -2247,7 +2247,9 @@ body {
   min-height: 100vh;
 }
 
-.scene {
+/* Design tokens live on :root so the native <dialog> (top-layer, outside
+   .scene in the DOM) can resolve var(--paper), var(--ink), etc. */
+:root {
   --paper: #efe6d2;
   --paper-deep: #e3d6b3;
   --ink: #1a1410;
@@ -2255,6 +2257,9 @@ body {
   --accent: #c83a1d;
   --moss: #2f4a2a;
   --rule: rgba(26, 20, 16, 0.18);
+}
+
+.scene {
   font-family: 'DM Mono', ui-monospace, Menlo, monospace;
   color: var(--ink);
   background: var(--paper);
