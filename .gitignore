@@ -20,3 +20,4 @@ __pycache__/
 
 # Synced from chip-input via iCloud — symlinked at deploy time, not committed
 standings/standings_latest.json
+.gstack/

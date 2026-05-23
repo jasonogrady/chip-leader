@@ -78,15 +78,21 @@ curl -I https://chip.ogrady.golf/             # should reach the Python server (
 sudo cloudflared service install
 # starts immediately and at boot via launchd
 sudo launchctl list | grep cloudflared            # verify
-tail -f ~/Library/Logs/com.cloudflare.cloudflared.out.log
+sudo tail -f /Library/Logs/com.cloudflare.cloudflared.out.log
+sudo tail -f /Library/Logs/com.cloudflare.cloudflared.err.log
 ```
+
+> The system-wide `sudo cloudflared service install` writes a LaunchDaemon
+> plist with `StandardOutPath = /Library/Logs/...` (root-owned), **not**
+> `~/Library/Logs/...`. Tail the system path with `sudo`.
 
 ## 6. Cloudflare Access (auth gate, free ≤ 50 users)
 
 Without this, `chip.ogrady.golf` would be wide-open to the internet.
 
-1. Cloudflare dashboard → **Zero Trust** → **Access** → **Applications** →
-   **Add an application** → **Self-hosted**.
+1. Cloudflare dashboard → **Cloudflare One** (formerly "Zero Trust") →
+   **Access controls** → **Applications** → **Add an application** →
+   **Self-hosted**.
 2. Application name: `Chip Leader`.
 3. Session duration: 1 month (long, since it's a phone bookmark).
 4. Application domain: `chip.ogrady.golf`.
@@ -95,7 +101,7 @@ Without this, `chip.ogrady.golf` would be wide-open to the internet.
 6. Add a policy:
    - Name: `Allow Jason + pool members`
    - Action: **Allow**
-   - Include → **Emails** → list `jason@ogrady.ai` and any pool members.
+   - Include → **Emails** → `jason@ogrady.ai`, `glen@dasilvadigital.com`, `lizi@me.com` (add additional pool members here as they're invited).
 7. Save.
 
 ## 7. Verify end-to-end
@@ -120,7 +126,9 @@ On iPhone: open in Safari → Share → **Add to Home Screen**. The PWA icon
   `brctl download standings/standings_latest.json picks_history.json`.
 - **Logs.**
   - chip-leader: `~/Library/Logs/chip-leader.log`
-  - cloudflared: `~/Library/Logs/com.cloudflare.cloudflared.out.log`
+  - cloudflared (system-installed via `sudo cloudflared service install`):
+    `/Library/Logs/com.cloudflare.cloudflared.{out,err}.log` — root-owned,
+    tail with `sudo`.
 - **Rotate access.** Revoke a user: Zero Trust → Access → Applications →
   Chip Leader → policy → remove email.
 - **Tunnel teardown.** `sudo cloudflared service uninstall` then

@@ -49,6 +49,43 @@ Phase 1 LAN deploy is **live**: LaunchAgent `com.feitclub.chipleader` serves `*:
 - **Full Disk Access for launchd-spawned `/bin/zsh`, `/usr/bin/python3`, and `/bin/cat`**. Without it, `/data` returns `{"error": "[Errno 11] Resource deadlock avoided"}` (EDEADLK on iCloud-symlinked reads) or `subprocess.CalledProcessError: Command '['/bin/cat', '.../picks_history.json']' returned non-zero exit status 1` (the resilient reader shells out to `/bin/cat`). HTML serves fine — the error only hits the data endpoint. Fix: System Settings → Privacy & Security → Full Disk Access → add all three binaries; granting FDA to Terminal.app does not propagate. Then `launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader`.
 - **Fallback if FDA doesn't pan out**: periodic copy step (cron or second LaunchAgent) that mirrors the two iCloud files into a non-iCloud cache directory; repoint chip-leader's symlinks at the cache.
 - **GitHub push auth**: remote is `jasonogrady/chip-leader` but local `gh` is logged in as `chipcutstack` — `gh auth switch`/`login` before pushing v1.1.0 and beyond.
+- **[OPEN — 2026-05-22 night] chip.ogrady.golf returns "Unable to connect to origin" after Access auth.** Edge → 302 to Access ✅, email PIN ✅, then the post-auth request lands on the Cloudflare Tunnel error page. **Everything individually checks out:** DNS CNAME = `chip → 5516d4b9-9ef8-4ffe-873e-8c635cd86915.cfargotunnel.com` (proxied, confirmed via dashboard DNS export); tunnel daemon up with 4 healthy edge connections (sjc01/05/06/07); `~/.cloudflared/config.yml` ingress validates OK; origin `127.0.0.1:8765` responding from the Python server. **No Workers Routes, Page Rules, or Configuration Rules** on the zone touching `chip.ogrady.golf/*`. **No failed-proxy entries in `/Library/Logs/com.cloudflare.cloudflared.err.log`** even after auth attempts — meaning post-Access requests are NOT reaching the tunnel daemon at all. Daemon kickstart at 06:10Z didn't fix it. Open hypothesis: misbinding on the Access "Chip Leader" application itself (possibly created against a Worker that no longer exists, or has a stale service URL). **Next diagnostic step:** disable the Access app from Cloudflare One → Access → Applications and curl the bare hostname — if it 200s, Access is the issue and we recreate it per `deploy/cloudflared/SETUP.md` step 6. If it still 1033s, run cloudflared in foreground with `--loglevel debug` to capture inbound edge requests.
+- **Doc bug — cloudflared log path.** SETUP.md and the operational notes below say `~/Library/Logs/com.cloudflare.cloudflared.out.log`, but `sudo cloudflared service install` writes the plist with `StandardOutPath = /Library/Logs/com.cloudflare.cloudflared.out.log` (system-wide `/Library`, not `~/Library`). The user-home path doesn't exist. Fix the docs.
+
+## Developing from the laptop (not always on modelhost)
+
+The iCloud-synced working tree at
+`~/Library/Mobile Documents/com~apple~CloudDocs/GitHub/chip-leader` IS the
+laptop-editable copy — but iCloud sync to modelhost is lossy under launchd
+(FDA gotchas, EDEADLK) and there's no guarantee a save on the laptop is
+visible to the LaunchAgent on the mini before the next refresh tick.
+
+**Recommended workflow (git-only, no iCloud reliance for code):**
+
+1. **Laptop** — work in a fresh clone outside iCloud (e.g.
+   `~/code/chip-leader`) so saves don't get scrambled by iCloud at edit time:
+   ```zsh
+   gh auth switch                # ensure jasonogrady, not chipcutstack
+   git clone https://github.com/jasonogrady/chip-leader.git ~/code/chip-leader
+   ```
+2. **Make changes → commit → push to `main`.** This repo doesn't use feature
+   branches; gameday cadence is "ship to main, kick the agent."
+3. **modelhost** — pull and kick the LaunchAgent. Two-liner:
+   ```zsh
+   ssh tensor@modelhost.local 'cd ~/chip-leader && git pull && \
+     launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader'
+   ```
+4. The two cross-cutting JSON files (`standings/standings_latest.json`,
+   `picks_history.json`) still live in iCloud and are still symlinked into
+   `~/chip-leader` on modelhost — only the code path moves to git. Data sync
+   continues through iCloud because that's where chip-input writes it.
+
+**Why a fresh clone instead of just using the iCloud copy:** Apple's iCloud
+file coordinator can delay writes or expose half-written files mid-save to
+other readers (including the LaunchAgent reading code on modelhost if the
+working tree were iCloud-mounted there — which is why modelhost already
+uses a separate `~/chip-leader` clone). Keep code on git, keep data on
+iCloud, and the two stay clean.
 
 ## Mac mini deployment (Phase 1 — LAN)
 
@@ -102,9 +139,11 @@ stays the registrar; Cloudflare takes over DNS for the zone.
    ```zsh
    sudo cloudflared service install   # writes a launchd plist + starts it
    ```
-6. **Auth gate (Cloudflare Access, free for ≤50 users).** Zero Trust →
-   Access → Applications → Add → Self-hosted → `chip.ogrady.golf`. Policy:
-   *Allow* if email matches `jason@ogrady.ai` (and any pool members you want).
+6. **Auth gate (Cloudflare Access, free for ≤50 users).** Cloudflare One
+   (formerly "Zero Trust") → Access controls → Applications → Add →
+   Self-hosted → `chip.ogrady.golf`. Policy:
+   *Allow* if email matches `jason@ogrady.ai`, `glen@dasilvadigital.com`,
+   `lizi@me.com` (extend with pool members as they're invited).
    Identity provider: One-time PIN (email magic link) — zero account setup
    for guests; or Google SSO if you'd rather.
 7. **Verify.**
@@ -148,8 +187,10 @@ the router NAT.
 - **iCloud symlink lag.** On tournament Sunday, run
   `brctl download standings/standings_latest.json picks_history.json` if the
   laptop's recent edits haven't propagated.
-- **Logs.** `cloudflared` → `~/Library/Logs/com.cloudflare.cloudflared.out.log`.
-  `chip-leader` → `~/Library/Logs/chip-leader.log` (per LaunchAgent plist).
+- **Logs.** `cloudflared` (installed via `sudo cloudflared service install`)
+  writes to `/Library/Logs/com.cloudflare.cloudflared.{out,err}.log` (system-
+  wide `/Library`, owned by root — use `sudo tail`). `chip-leader` →
+  `~/Library/Logs/chip-leader.log` (per LaunchAgent plist).
 
 ## Mac mini deployment (Phase 3 — PWA)
 
