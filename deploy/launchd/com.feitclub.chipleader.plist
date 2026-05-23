@@ -14,9 +14,11 @@
     </array>
 
     <!-- launchd plists do not expand $HOME in path strings, so paths below
-         are populated by the deploy step. Edit jason → your username. -->
+         must be replaced literally before `launchctl load`. From the repo root:
+           sed -i '' "s|__USERNAME__|$USER|g" deploy/launchd/com.feitclub.chipleader.plist
+         then copy into ~/Library/LaunchAgents/. -->
     <key>WorkingDirectory</key>
-    <string>/Users/jason/chip-leader</string>
+    <string>/Users/__USERNAME__/chip-leader</string>
 
     <key>RunAtLoad</key>
     <true/>
@@ -25,10 +27,10 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/jason/Library/Logs/chip-leader.log</string>
+    <string>/Users/__USERNAME__/Library/Logs/chip-leader.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/jason/Library/Logs/chip-leader.log</string>
+    <string>/Users/__USERNAME__/Library/Logs/chip-leader.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>

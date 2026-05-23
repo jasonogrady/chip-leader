@@ -42,7 +42,7 @@ dig chip.ogrady.golf +short   # only resolves after `cloudflared tunnel route dn
 
 ## Active deploy on `modelhost` Mac Mini (user `tensor`, May 2026)
 
-Phase 1 LAN deploy is **live**: LaunchAgent `com.feitclub.chipleader` serves `*:8765`, reachable at `http://modelhost.local:8765` and `http://192.168.0.172:8765`. Live working tree is `~/chip-leader` (cloned from iCloud); deploy template at `deploy/launchd/com.feitclub.chipleader.plist` still hardcodes `/Users/jason/...` — edit before installing on a new machine.
+Phase 1 LAN deploy is **live**: LaunchAgent `com.feitclub.chipleader` serves `*:8765`, reachable at `http://modelhost.local:8765` and `http://192.168.0.172:8765`. Live working tree is `~/chip-leader` (cloned from iCloud); deploy template at `deploy/launchd/com.feitclub.chipleader.plist` uses a `__USERNAME__` placeholder — run the `sed` one-liner in the plist's header comment before `launchctl load`.
 
 ### Open issues on this deploy
 
@@ -50,7 +50,6 @@ Phase 1 LAN deploy is **live**: LaunchAgent `com.feitclub.chipleader` serves `*:
 - **Fallback if FDA doesn't pan out**: periodic copy step (cron or second LaunchAgent) that mirrors the two iCloud files into a non-iCloud cache directory; repoint chip-leader's symlinks at the cache.
 - **GitHub push auth**: remote is `jasonogrady/chip-leader` but local `gh` is logged in as `chipcutstack` — `gh auth switch`/`login` before pushing v1.1.0 and beyond.
 - **[OPEN — 2026-05-22 night] chip.ogrady.golf returns "Unable to connect to origin" after Access auth.** Edge → 302 to Access ✅, email PIN ✅, then the post-auth request lands on the Cloudflare Tunnel error page. **Everything individually checks out:** DNS CNAME = `chip → 5516d4b9-9ef8-4ffe-873e-8c635cd86915.cfargotunnel.com` (proxied, confirmed via dashboard DNS export); tunnel daemon up with 4 healthy edge connections (sjc01/05/06/07); `~/.cloudflared/config.yml` ingress validates OK; origin `127.0.0.1:8765` responding from the Python server. **No Workers Routes, Page Rules, or Configuration Rules** on the zone touching `chip.ogrady.golf/*`. **No failed-proxy entries in `/Library/Logs/com.cloudflare.cloudflared.err.log`** even after auth attempts — meaning post-Access requests are NOT reaching the tunnel daemon at all. Daemon kickstart at 06:10Z didn't fix it. Open hypothesis: misbinding on the Access "Chip Leader" application itself (possibly created against a Worker that no longer exists, or has a stale service URL). **Next diagnostic step:** disable the Access app from Cloudflare One → Access → Applications and curl the bare hostname — if it 200s, Access is the issue and we recreate it per `deploy/cloudflared/SETUP.md` step 6. If it still 1033s, run cloudflared in foreground with `--loglevel debug` to capture inbound edge requests.
-- **Doc bug — cloudflared log path.** SETUP.md and the operational notes below say `~/Library/Logs/com.cloudflare.cloudflared.out.log`, but `sudo cloudflared service install` writes the plist with `StandardOutPath = /Library/Logs/com.cloudflare.cloudflared.out.log` (system-wide `/Library`, not `~/Library`). The user-home path doesn't exist. Fix the docs.
 
 ## Developing from the laptop (not always on modelhost)
 
