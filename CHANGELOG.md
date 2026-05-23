@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.5.0 — 2026-05-23
+
+### Fix — chip.ogrady.golf works post-Access auth
+- Root cause: the original Cloudflare Access "Chip Leader" application held a stale binding (likely the deleted `chip-ogrady-golf` Worker as its service URL), so post-auth requests dead-ended at Cloudflare's edge and never reached the tunnel daemon. The tunnel itself was healthy the entire time — `/Library/Logs/com.cloudflare.cloudflared.err.log` showed zero failed-proxy entries because zero requests arrived.
+- Fix: delete the broken Access app and recreate it per `deploy/cloudflared/SETUP.md` §6 (Self-hosted, domain `chip.ogrady.golf`, One-time PIN, allow-list policy). New app's JWT `kid` flipped from `1d49dc19…` to `47258c7a…`, confirming clean rebind. End-to-end verified: `curl https://chip.ogrady.golf/` → 200 chip-leader HTML when Access was momentarily disabled; with the new Access app in place, browser email-PIN auth lands on the leaderboard.
+
+### Deploy template + docs polish
+- `deploy/launchd/com.feitclub.chipleader.plist` no longer hardcodes `/Users/jason/...`; uses a `__USERNAME__` placeholder with a one-line `sed` snippet in the header comment.
+- BACKLOG: dropped the stale "cloudflared log path" doc-bug entry (SETUP.md already shows the correct `/Library/Logs/...` system path).
+
 ## v1.4.0 — 2026-05-14
 
 ### Tournament tab — always show my pick
