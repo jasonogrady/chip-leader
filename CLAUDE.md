@@ -18,7 +18,7 @@ Inputs (read-only; written by chip-input on the laptop and synced via iCloud):
 
 Outputs:
 
-- DG live data fetched on-demand via the `pga-tour-live-stats` and prediction endpoints (DataGolf API key required at startup).
+- Live tour data fetched on-demand via the upstream live-stats and prediction endpoints (provider API key required at startup; stored under the `DATAGOLF_API_KEY` env var name for historical compatibility).
 
 ---
 
@@ -26,7 +26,7 @@ Outputs:
 
 The Wednesday picking pipeline lives in `chip-input`:
 
-- DataGolf board enrichment, course fit, course history.
+- Live-feed board enrichment, course fit, course history.
 - Competitor model + predicted ownership.
 - Pre-tournament odds tracking.
 - Season projection.
@@ -117,7 +117,7 @@ Remote is `https://github.com/jasonogrady/chip-leader.git`. `gh` on this Mac min
 ## Web view features
 
 - **Pool Standings tab** — projected rank, current rank, current $, projected $, Δ$, Cuts ratio, projected position delta.
-- **Tournament Board tab** — DG live top 25 with win%, top10%, make-cut%.
+- **Tournament Board tab** — live top 25 with win%, top10%, make-cut%; my pick always shown (prepended if outside the window).
 - **Top TKEs tab** — scored leaderboard for the TKE friend group with 🐉 markers.
 - **Narrative tab** — generated commentary on tournament + pool + TKE.
 

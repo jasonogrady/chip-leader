@@ -119,7 +119,7 @@ On iPhone: open in Safari → Share → **Add to Home Screen**. The PWA icon
 ## Operational notes
 
 - **Mac mini sleep.** `sudo pmset -a sleep 0 disksleep 0 displaysleep 30`.
-- **DG quota under public access.** Auto-pause (overnight 7pm–7am +
+- **Provider quota under public access.** Auto-pause (overnight 7pm–7am +
   tab-hidden) keeps polls low. If Sunday traffic ever spikes, add a
   server-side `/data` cache (30s TTL keyed on `meta.last_update`).
 - **iCloud symlink lag.** On tournament Sunday, force-sync if needed:

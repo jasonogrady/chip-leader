@@ -14,7 +14,7 @@ Reads:
     picks_history.json                — parsed picks by tournament
     standings/standings_latest.json  — pre-tournament pool standings
 
-DataGolf live (fetched fresh each run):
+Live feed (fetched fresh each run):
     /preds/in-play  — scores, win%, top_5/10/20, make_cut per player
 
 Outputs:
@@ -95,7 +95,7 @@ def _retry_edeadlk(fn, *, attempts: int = 4, delay: float = 0.25):
 
 
 def _urlopen_json(url: str, *, timeout: int = 30) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": "jdog-datagolf/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "jdog-live/1.0"})
     def _do():
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode())
@@ -142,7 +142,7 @@ def event_tz(location: str | None) -> ZoneInfo:
     return ZoneInfo("America/New_York")
 
 def parse_dg_last_update(s: str | None) -> datetime | None:
-    """DG returns local-event time as 'YYYY-MM-DD H:MM PM' (no tz)."""
+    """Live feed returns local-event time as 'YYYY-MM-DD H:MM PM' (no tz)."""
     if not s:
         return None
     for fmt in ("%Y-%m-%d %I:%M %p", "%Y-%m-%d %H:%M:%S UTC", "%Y-%m-%d %H:%M"):
@@ -221,7 +221,7 @@ PRIZE_TIERS = {
 }
 
 def expected_payout(p: dict) -> float:
-    """Probability-weighted expected Masters payout from DG in-play fields."""
+    """Probability-weighted expected Masters payout from live in-play fields."""
     win   = p.get("win",      0) or 0
     top5  = p.get("top_5",    0) or 0
     top10 = p.get("top_10",   0) or 0
@@ -291,7 +291,7 @@ def sg_diagnosis(sg: dict) -> str:
 
 
 # ── Name mapping ──────────────────────────────────────────────────────────────
-# DataGolf event names → picks_history tournament names
+# Live-feed event names → picks_history tournament names
 
 # ── TKE group ─────────────────────────────────────────────────────────────────
 # (entry_name_in_pool, display_alias_or_None)
@@ -319,7 +319,7 @@ TKE_GROUP = [
 TKE_NAMES = {e for e, _ in TKE_GROUP}
 
 
-DG_NAME_MAP = {
+LIVE_EVENT_NAME_MAP = {
     "Masters Tournament":    "The Masters",
     "PGA Championship":      "PGA Championship",
     "U.S. Open":             "U.S. Open Championship",
@@ -330,7 +330,7 @@ DG_NAME_MAP = {
 
 # ── Data loaders ──────────────────────────────────────────────────────────────
 
-def load_picks(dg_tournament: str) -> tuple[dict[str, str], str]:
+def load_picks(live_tournament: str) -> tuple[dict[str, str], str]:
     """Return ({entry: dg_name}, resolved_tournament)."""
     path = ROOT / "picks_history.json"
     if not path.exists():
@@ -338,17 +338,17 @@ def load_picks(dg_tournament: str) -> tuple[dict[str, str], str]:
     data = json.loads(_read_text_resilient(path))
     known = {r["tournament"] for r in data}
 
-    resolved = DG_NAME_MAP.get(dg_tournament)
+    resolved = LIVE_EVENT_NAME_MAP.get(live_tournament)
     if not resolved or resolved not in known:
-        resolved = dg_tournament if dg_tournament in known else None
+        resolved = live_tournament if live_tournament in known else None
     if not resolved:
         for t in known:
-            if any(w in dg_tournament for w in t.split()):
+            if any(w in live_tournament for w in t.split()):
                 resolved = t
                 break
     if not resolved:
-        sys.exit(f"No picks for '{dg_tournament}'.\nKnown: {sorted(known)}\n"
-                 "Add a mapping to DG_NAME_MAP or run parse_picks.py.")
+        sys.exit(f"No picks for '{live_tournament}'.\nKnown: {sorted(known)}\n"
+                 "Add a mapping to LIVE_EVENT_NAME_MAP or run parse_picks.py.")
 
     picks = {r["entry"]: r["dg_name"] for r in data if r["tournament"] == resolved}
     return picks, resolved
@@ -364,7 +364,7 @@ def load_standings() -> tuple[list[dict], str]:
 
 
 def fetch_inplay() -> tuple[dict, dict]:
-    """Fetch DG in-play. Returns (info, {player_name: record})."""
+    """Fetch live in-play feed. Returns (info, {player_name: record})."""
     url = (f"{BASE}/preds/in-play"
            f"?tour=pga&dead_heat=yes&odds_format=percent&file_format=json&key={API_KEY}")
     raw = _urlopen_json(url)
@@ -373,7 +373,7 @@ def fetch_inplay() -> tuple[dict, dict]:
 
 
 def fetch_live_stats(round_str: str = "event") -> dict[str, dict]:
-    """Fetch DG live-tournament-stats for a given round.
+    """Fetch live tournament-stats for a given round.
 
     round_str: 'event' (cumulative) or '1', '2', '3', '4'
     Returns {player_name: {sg_ott, sg_app, sg_arg, sg_putt, sg_total}}
@@ -615,32 +615,48 @@ def build_narrative(my_entry, entry_pick, live, standings, proj_rank,
         first   = my_pick.split(",")[1].strip() if "," in my_pick else my_pick
         finished_r4 = (current_round == 4 and thru == 18)
 
+        # Round-aware tone. "Sunday-charge" language only fires on R4 in progress;
+        # earlier rounds get round-appropriate framing (hot start, cut-line, moving
+        # day) so a Thursday leader doesn't get described as making a Sunday push.
         if finished_r4:
-            if score <= -8:
-                tone = "finished in stunning form"
-            elif score <= -4:
-                tone = "turned in a strong final round"
-            elif score <= -1:
-                tone = "finished in solid shape"
-            elif score == 0:
-                tone = "finished at even par — respectable"
-            elif score <= 3:
-                tone = "finished over par — a tough week"
-            else:
-                tone = "had a rough week"
+            if   score <= -8: tone = "finished in stunning form"
+            elif score <= -4: tone = "turned in a strong final round"
+            elif score <= -1: tone = "finished in solid shape"
+            elif score == 0:  tone = "finished at even par — respectable"
+            elif score <=  3: tone = "finished over par — a tough week"
+            else:             tone = "had a rough week"
+        elif current_round == 4:
+            # Sunday, in progress — the genuine charge window
+            if   score <= -8: tone = "is in full Sunday-charge mode"
+            elif score <= -4: tone = "is making serious Sunday moves"
+            elif score <= -1: tone = "is in solid Sunday shape"
+            elif score == 0:  tone = "is even par with the Sunday clock ticking"
+            elif score <=  3: tone = "is fighting to climb the Sunday leaderboard"
+            else:             tone = "is in serious trouble on Sunday"
+        elif current_round == 3:
+            # Saturday — moving day
+            if   score <= -10: tone = "is dominating moving day"
+            elif score <= -6:  tone = "is making a big move on Saturday"
+            elif score <= -3:  tone = "is climbing the board on moving day"
+            elif score <=  0:  tone = "is hanging around the cut line on Saturday"
+            elif score <=  3:  tone = "is treading water on moving day"
+            else:              tone = "is fading on Saturday"
+        elif current_round == 2:
+            # Friday — cut-line round
+            if   score <= -8: tone = "is putting on a Friday clinic"
+            elif score <= -4: tone = "is well clear of the cut line"
+            elif score <= -1: tone = "is in comfortable cut-line position"
+            elif score == 0:  tone = "is hovering right around the projected cut"
+            elif score <=  3: tone = "is in cut-line danger on Friday"
+            else:             tone = "is unlikely to make the cut at this pace"
         else:
-            if score <= -8:
-                tone = "is in full Sunday-charge mode"
-            elif score <= -4:
-                tone = "is making serious moves"
-            elif score <= -1:
-                tone = "is in solid shape"
-            elif score == 0:
-                tone = "is treading water at even par"
-            elif score <= 3:
-                tone = "is struggling but likely to survive the cut"
-            else:
-                tone = "is in serious trouble"
+            # Round 1 — Thursday
+            if   score <= -7: tone = "fired a low one to open the week"
+            elif score <= -4: tone = "is off to a hot start"
+            elif score <= -1: tone = "is off to a solid start"
+            elif score == 0:  tone = "opened with an even-par round"
+            elif score <=  3: tone = "is over par after R1 — needs a bounce-back tomorrow"
+            else:             tone = "is digging out of a hole after R1"
 
         today_s = fmt_score(today) if today else "—"
         pool_dir = f"up {abs(my_delta)}" if my_delta < 0 else (f"down {my_delta}" if my_delta > 0 else "steady")
@@ -652,9 +668,11 @@ def build_narrative(my_entry, entry_pick, live, standings, proj_rank,
                  f"Win probability: {win_pct:.1f}%. "
                  f"Pool standing projected {pool_note} of {n_total}.")
         else:
+            # Cut decision is in by R3 — suppress the cut-survival line then.
+            cut_part = f" Cut survival: {mkcut:.0f}%." if current_round <= 2 else ""
             p = (f"{my_entry}: {first} {tone}. He's at {fmt_score(score)} ({pos}) "
                  f"through {thru} holes of R{current_round}, {today_s} today. "
-                 f"Win probability: {win_pct:.1f}%. Cut survival: {mkcut:.0f}%. "
+                 f"Win probability: {win_pct:.1f}%.{cut_part} "
                  f"Pool standing projected {pool_note} of {n_total}.")
         paras.append(p)
 
@@ -989,7 +1007,7 @@ def render_scoreboard(args, refresh_secs: int | None = None) -> None:
     # ── Header ────────────────────────────────────────────────────────────────
     print("━" * W)
     print(bold(f"  🦫 CHIP LEADER 🏆  ·  {label}  Round {current_round}  ·  {now_str}{refresh_note}"))
-    print(f"  {n_total} entries  ·  DG updated: {last_update}  ·  standings as of {standings_date}")
+    print(f"  {n_total} entries  ·  live updated: {last_update}  ·  standings as of {standings_date}")
     print("━" * W)
     print()
 
@@ -1188,7 +1206,7 @@ def render(args, refresh_secs: int | None = None) -> None:
     # ── Header ───────────────────────────────────────────────────────────────
     print(f"{'━' * W}")
     print(bold(f"  🦫 CHIP LEADER 🏆  ·  {label}  Round {current_round}  ·  {now_str}{refresh_note}"))
-    print(f"  {n_total} entries  ·  DG updated: {last_update}  ·  standings as of {standings_date}")
+    print(f"  {n_total} entries  ·  live updated: {last_update}  ·  standings as of {standings_date}")
     print(f"{'━' * W}")
     print()
 
@@ -1373,7 +1391,7 @@ def render_tke(args, refresh_secs: int | None = None) -> None:
     W = 110
     print("━" * W)
     print(bold(f"  TKE LEADERBOARD  ·  {label}  Round {current_round}  ·  {now_str}{refresh_note}"))
-    print(f"  {len(tke_rows)} entries  ·  {n_total} total in pool  ·  DG updated: {last_update}")
+    print(f"  {len(tke_rows)} entries  ·  {n_total} total in pool  ·  live updated: {last_update}")
     print("━" * W)
     print()
 
@@ -1732,7 +1750,7 @@ tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
 </div>
 
 <div class="content">
-  <div class="banner banner-load" id="banner-load"><span class="braille-spin load">⠋</span>Fetching live data from DataGolf…</div>
+  <div class="banner banner-load" id="banner-load"><span class="braille-spin load">⠋</span>Fetching live data…</div>
   <div class="banner banner-err"  id="banner-err"></div>
   <div class="banner banner-warn" id="banner-stale"></div>
 
@@ -1800,7 +1818,7 @@ tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
   </div>
 </div>
 
-<div class="footer">🦫 Chip Leader 🏆 · Feit Club One-and-Done · ⛳ Powered by DataGolf</div>
+<div class="footer">🦫 Chip Leader 🏆 · Feit Club One-and-Done</div>
 
 <script>
 const REFRESH = 120;
@@ -2064,7 +2082,7 @@ function renderAll(data) {
   document.getElementById('hdr-context').textContent =
     '·  ' + m.tournament + '  ·  R' + m.round;
   document.getElementById('hdr-meta').textContent =
-    '👥 ' + m.n_total + ' entries  ·  🛰 DG ' + m.last_update +
+    '👥 ' + m.n_total + ' entries  ·  🛰 live ' + m.last_update +
     '  ·  📊 standings ' + m.standings_date;
   document.getElementById('last-fetched').textContent = '🕒 ' + m.fetched_at;
 
@@ -2185,7 +2203,7 @@ def _strip_ansi(s: str) -> str:
 
 def _today_with_fallback(player: dict, current_round: int):
     """Return player's today-score, falling back to current_score minus prior
-    round totals when DG returns null mid-round."""
+    round totals when the live feed returns null mid-round."""
     today = player.get(f"R{current_round}", player.get("today"))
     if today is not None:
         return today
@@ -2281,12 +2299,13 @@ def build_web_data(args) -> dict:
 
     tournament_top = [_tournament_row(p) for p in live_sorted[:25]]
 
-    # Always include my pick, even if outside the top-25 window
+    # Always include my pick. If outside the top-25 window, prepend it so it's
+    # visible above the fold on mobile (appending puts it 25 rows down).
     my_pick = entry_pick.get(args.my_entry)
     if my_pick and not any(r["player"] == my_pick for r in tournament_top):
         my_player = live.get(my_pick)
         if my_player:
-            tournament_top.append(_tournament_row(my_player))
+            tournament_top.insert(0, _tournament_row(my_player))
 
     # TKE rows
     alias_map = {e: a for e, a in TKE_GROUP if a}
@@ -2331,8 +2350,8 @@ def build_web_data(args) -> dict:
     )
     narrative_lines = [_strip_ansi(ln) for ln in narrative_raw]
 
-    # Convert DG's last_updated (Eastern, returned as "YYYY-MM-DD H:MM AM/PM"
-    # or 24-hour UTC) to local time.
+    # Convert the live feed's last_updated (Eastern, returned as
+    # "YYYY-MM-DD H:MM AM/PM" or 24-hour UTC) to local time.
     last_update_local = str(last_update)
     try:
         from datetime import datetime
@@ -2415,9 +2434,9 @@ def serve_web(args, port: int = 8765) -> None:
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from urllib.parse import urlparse
 
-    # Collapse concurrent /data requests to a single DG fetch (30s TTL).
+    # Collapse concurrent /data requests to a single upstream fetch (30s TTL).
     # Prevents macOS Secure Transport EDEADLK under concurrent SSL handshakes
-    # and cuts DG quota burn when many phones poll within the same window.
+    # and cuts provider quota burn when many phones poll within the same window.
     data_cache: dict = {"ts": 0.0, "payload": None}
     data_lock = threading.Lock()
     DATA_TTL = 30  # seconds
@@ -2430,7 +2449,7 @@ def serve_web(args, port: int = 8765) -> None:
             try:
                 payload = build_web_data(args)
             except Exception:
-                # On transient failure (iCloud EDEADLK, DG hiccup), serve the last
+                # On transient failure (iCloud EDEADLK, upstream hiccup), serve the last
                 # successful payload if we have one — better stale than 500.
                 if data_cache["payload"] is not None:
                     import traceback

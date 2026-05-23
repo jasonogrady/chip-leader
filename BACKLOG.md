@@ -90,7 +90,7 @@ iCloud, and the two stay clean.
 
 1. **Prereqs.** `brew install python@3 caddy` (and `poppler` only if PDF parsing is ever added back; not needed for the gameday-only path).
 2. **Clone.** `git clone https://github.com/jasonogrady/chip-leader.git ~/chip-leader`.
-3. **DataGolf key in keychain.**
+3. **Live-feed key in keychain.**
    ```zsh
    security add-generic-password -s chip-leader -a datagolf -w '<key>'
    ```
@@ -178,7 +178,7 @@ the router NAT.
 
 ### Operational notes
 
-- **DG quota under public access.** Auto-pause (overnight + tab-hidden +
+- **Provider quota under public access.** Auto-pause (overnight + tab-hidden +
   off-hours 10-min poll) keeps requests low. Add a server-side `/data` cache
   (30s TTL keyed on `meta.last_update`) if Sunday traffic ever spikes.
 - **Mac mini sleep.** `sudo pmset -a sleep 0 disksleep 0 displaysleep 30`
@@ -198,12 +198,12 @@ the router NAT.
 
 ## Outstanding leaderboard polish (carried over from chip-input)
 
-- ~~`today` fallback when DG returns null mid-round (compute as `current_score − Σ prior_round_totals`).~~ — done in v1.1.1 (`_today_with_fallback`).
+- ~~`today` fallback when the live feed returns null mid-round (compute as `current_score − Σ prior_round_totals`).~~ — done in v1.1.1 (`_today_with_fallback`).
 - ETag / 304 on `/data` keyed on `meta.last_update`.
 - ~~Row-change flash (5s yellow fade) when score/rank changes between polls.~~ — done in v1.1.1 (`flashIfChanged` + `row-flash` keyframe).
 - Cut-watch badge for entries whose pick has make_cut < 0.7.
 - Round selector — flip leaderboards across R1/R2/R3/R4.
-- SSE push (server fetches DG, pushes diffs) instead of 120s client poll.
+- SSE push (server fetches upstream, pushes diffs) instead of 120s client poll.
 - Closest-rivals banner on Pool tab (already in narrative; surface on the table view).
 - Sparkline of pool rank over rounds, per entry.
 - Pick simulator — what would my projected rank be if I'd picked X?
