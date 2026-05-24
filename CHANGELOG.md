@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.0 — 2026-05-23
+
+### Chore — ignore ad-hoc `screenshots/`
+- Added `screenshots/` to `.gitignore`. Local QA/marketing captures (e.g. `friends.png`, `narrative.png`, `pool.png`, `tournament.png`) no longer show up as untracked on every `git status`.
+
 ## v1.8.0 — 2026-05-23
 
 ### Fix — "Sent!" modal renders unstyled
