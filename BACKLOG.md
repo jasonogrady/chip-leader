@@ -2,7 +2,16 @@
 
 Gameday-only fork of chip-input. Picking-pipeline backlog stays in chip-input.
 
-## Gameday playbook — CJ Cup Byron Nelson (Thu 2026-05-21)
+## Past gameday playbook — CJ Cup Byron Nelson (2026-05-21 to 2026-05-24)
+
+**Outcome (closed out 2026-05-25, v2.0.0):**
+- Tournament concluded 2026-05-24. My pick (Jordan Spieth) finished T19, +$100,597.
+- Season YTD post-week-14: rank 24 of 148, $8,720,429 winnings, 9/10 cuts made, 2,180 FedEx points (rank delta from pre-tournament: down 3 slots).
+- Standings refreshed on modelhost via iCloud sync of `standings_latest.json` (week 14, source=ytd_pdf, 148 entries, 3 baseline reconciliation issues unchanged from prior weeks).
+- chip-input parser fix (`jasonogrady/chip-input@2607cf1`) decouples tournament-name detection from the `TOURNAMENT_DATES` dict; future tournament weeks parse correctly even before their date entry exists. Added entries for w14 (CJ Cup Byron Nelson) and w15 (Charles Schwab Challenge) while in there.
+- ogrady.golf tunnel + Access stayed up through the week. No Cloudflare interventions needed.
+
+**Pre-tournament checklist kept below as template for next week (Charles Schwab Challenge, 2026-05-31).**
 
 **Current state (end of night 2026-05-20):**
 - Hostname-normalization fix committed (`325f80c`) and pushed.

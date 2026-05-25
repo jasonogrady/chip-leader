@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.0.0 — 2026-05-25
+
+### Chore: week 14 close-out (CJ Cup Byron Nelson)
+- Tournament concluded 2026-05-24. My pick (Jordan Spieth) finished T19, +$100,597. Season YTD post-week-14: rank 24 of 148, $8,720,429 winnings, 9/10 cuts, 2,180 FedEx points.
+- Standings refreshed on modelhost via iCloud sync of `standings_latest.json` (week 14, source=ytd_pdf, 148 entries, 3 baseline reconciliation issues, unchanged from prior weeks).
+- Companion fix in chip-input (`jasonogrady/chip-input@2607cf1`): `parse_standings.py` now detects tournament name from PDF header structure (walks back from the `Rank/Entry/Player` column-header row) instead of substring-matching against `TOURNAMENT_DATES`. Future tournament weeks parse correctly even without their date entry. Added w14 (CJ Cup Byron Nelson, 2026-05-24) and w15 (Charles Schwab Challenge, 2026-05-31) to the date map while in there.
+- `BACKLOG.md`: archived the CJ Cup gameday playbook to "Past gameday playbook" with the outcome summary; kept the pre-tournament checklist below as a template for next week.
+
 ## v1.9.0 — 2026-05-23
 
 ### Chore — ignore ad-hoc `screenshots/`
