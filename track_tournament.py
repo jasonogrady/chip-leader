@@ -28,6 +28,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -37,6 +38,41 @@ from zoneinfo import ZoneInfo
 ROOT      = Path(__file__).parent
 API_KEY   = os.environ.get("DATAGOLF_API_KEY")
 BASE      = "https://feeds.datagolf.com"
+
+# ── Upstream quota tracking ──────────────────────────────────────────────────
+# Counts every outbound DataGolf request, grouped by endpoint, with a daily
+# rollover log line. Lets us see actual consumption at a glance instead of
+# scraping tracebacks. Live snapshot also exposed at GET /quota.
+_QUOTA_LOCK = threading.Lock()
+_QUOTA: dict = {"day": "", "counts": {}, "total": 0}
+
+def _quota_endpoint(url: str) -> str:
+    from urllib.parse import urlparse
+    try:
+        return urlparse(url).path.strip("/") or "(root)"
+    except Exception:
+        return "(unparsed)"
+
+def _quota_log_locked() -> None:
+    parts = " ".join(f"{k}={v}" for k, v in sorted(_QUOTA["counts"].items()))
+    print(f"[quota] {_QUOTA['day']}: {parts} total={_QUOTA['total']}", flush=True)
+
+def _quota_record(url: str) -> None:
+    today = time.strftime("%Y-%m-%d")
+    with _QUOTA_LOCK:
+        if _QUOTA["day"] and _QUOTA["day"] != today:
+            _quota_log_locked()
+            _QUOTA["counts"] = {}
+            _QUOTA["total"] = 0
+        _QUOTA["day"] = today
+        ep = _quota_endpoint(url)
+        _QUOTA["counts"][ep] = _QUOTA["counts"].get(ep, 0) + 1
+        _QUOTA["total"] += 1
+
+def quota_snapshot() -> dict:
+    with _QUOTA_LOCK:
+        return {"day": _QUOTA["day"], "counts": dict(_QUOTA["counts"]),
+                "total": _QUOTA["total"]}
 MY_ENTRY  = "TIGER WOODS YALL!"
 
 # US state → IANA tz. Pragmatic single-zone-per-state mapping; PGA venues sit
@@ -99,6 +135,7 @@ def _urlopen_json(url: str, *, timeout: int = 30) -> dict:
     def _do():
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode())
+    _quota_record(url)
     return _retry_edeadlk(_do)
 
 
@@ -2969,31 +3006,72 @@ def serve_web(args, port: int = 8765) -> None:
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from urllib.parse import urlparse
 
-    # Collapse concurrent /data requests to a single upstream fetch (30s TTL).
-    # Prevents macOS Secure Transport EDEADLK under concurrent SSL handshakes
-    # and cuts provider quota burn when many phones poll within the same window.
-    data_cache: dict = {"ts": 0.0, "payload": None}
+    # Background fetcher owns ALL upstream calls. /data is a passive reader.
+    # Decouples client request rate from upstream rate — the cloudflared
+    # multiplier × cold-cache rebuild that caused the 429 incident is gone.
+    data_cache: dict = {"ts": 0.0, "payload": None, "cold_fail_ts": 0.0}
     data_lock = threading.Lock()
-    DATA_TTL = 30  # seconds
+    COLD_FAIL_BACKOFF = 60  # seconds — used for Retry-After hints only
 
-    def get_cached_data():
+    # Refresh cadence by tournament state. Day-of-week gate honors the
+    # PGA Thu–Sun schedule: Mon/Tue/Wed go effectively dormant.
+    REFRESH_ACTIVE    = 60     # 1 min while play is live
+    REFRESH_OFFHOURS  = 1800   # 30 min during overnight pause
+    REFRESH_CONCLUDED = 3600   # 1 hr after tournament wraps
+    REFRESH_UNKNOWN   = 1800   # 30 min when feed status is indeterminate
+    REFRESH_OFFWEEK   = 21600  # 6 hr Mon–Wed (no live PGA round)
+    REFRESH_COLD      = 30     # 30 s while we have no payload yet
+
+    def _is_tournament_day() -> bool:
+        # weekday(): Mon=0 … Sun=6 → PGA tournament rounds run Thu(3)–Sun(6).
+        return time.localtime().tm_wday >= 3
+
+    def _next_refresh_seconds(payload) -> int:
+        if payload is None:
+            return REFRESH_COLD
+        if not _is_tournament_day():
+            return REFRESH_OFFWEEK
+        status = ((payload.get("meta") or {}).get("play") or {}).get("status")
+        if status in ("active", "lightning"):
+            return REFRESH_ACTIVE
+        if status == "off-hours":
+            return REFRESH_OFFHOURS
+        if status == "concluded":
+            return REFRESH_CONCLUDED
+        return REFRESH_UNKNOWN
+
+    class _ServiceUnavailable(Exception):
+        """No cached payload yet. /data returns 503 until the first build
+        succeeds; clients should retry shortly."""
+
+    def _do_fetch_once() -> None:
+        try:
+            payload = build_web_data(args)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            with data_lock:
+                if data_cache["payload"] is None:
+                    data_cache["cold_fail_ts"] = time.time()
+            return
         with data_lock:
-            now = time.time()
-            if data_cache["payload"] is not None and now - data_cache["ts"] < DATA_TTL:
-                return data_cache["payload"]
-            try:
-                payload = build_web_data(args)
-            except Exception:
-                # On transient failure (iCloud EDEADLK, upstream hiccup), serve the last
-                # successful payload if we have one — better stale than 500.
-                if data_cache["payload"] is not None:
-                    import traceback
-                    traceback.print_exc()
-                    return data_cache["payload"]
-                raise
-            data_cache["ts"] = now
+            data_cache["ts"] = time.time()
             data_cache["payload"] = payload
-            return payload
+            data_cache["cold_fail_ts"] = 0.0
+
+    def _fetcher_loop() -> None:
+        while True:
+            with data_lock:
+                p = data_cache["payload"]
+            interval = _next_refresh_seconds(p)
+            time.sleep(interval)
+            _do_fetch_once()
+
+    def get_cached_data() -> dict:
+        with data_lock:
+            if data_cache["payload"] is not None:
+                return data_cache["payload"]
+        raise _ServiceUnavailable("warming up; no payload yet")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *a):
@@ -3054,6 +3132,14 @@ def serve_web(args, port: int = 8765) -> None:
                     self.send_header("ETag", etag)
                     self.end_headers()
                     self.wfile.write(body)
+                except _ServiceUnavailable as exc:
+                    err = json.dumps({"error": "warming up", "detail": str(exc)}).encode()
+                    self.send_response(503)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Retry-After", str(COLD_FAIL_BACKOFF))
+                    self.send_header("Content-Length", len(err))
+                    self.end_headers()
+                    self.wfile.write(err)
                 except Exception as exc:
                     import traceback
                     traceback.print_exc()
@@ -3063,6 +3149,21 @@ def serve_web(args, port: int = 8765) -> None:
                     self.send_header("Content-Length", len(err))
                     self.end_headers()
                     self.wfile.write(err)
+            elif path == "/quota":
+                snap = quota_snapshot()
+                with data_lock:
+                    snap["payload_age_s"] = (
+                        round(time.time() - data_cache["ts"], 1)
+                        if data_cache["payload"] is not None else None
+                    )
+                    snap["next_refresh_s"] = _next_refresh_seconds(data_cache["payload"])
+                body = json.dumps(snap, indent=2).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", len(body))
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                self.wfile.write(body)
             else:
                 body = _HTML_404_PAGE.encode()
                 self.send_response(404)
@@ -3106,6 +3207,13 @@ def serve_web(args, port: int = 8765) -> None:
             self.end_headers()
             self.wfile.write(data)
 
+    # Warm the cache once before binding the port so the first request gets
+    # data instead of a polite-503. If this initial fetch fails, the loop
+    # below keeps retrying on its own cadence — clients see 503 until success.
+    _do_fetch_once()
+    threading.Thread(target=_fetcher_loop, daemon=True,
+                     name="upstream-fetcher").start()
+
     for attempt in range(10):
         try:
             httpd = ThreadingHTTPServer(("0.0.0.0", port + attempt), Handler)
@@ -3121,8 +3229,9 @@ def serve_web(args, port: int = 8765) -> None:
     except Exception:
         host = "localhost"
     url = f"http://{host}:{port}"
-    print(f"\n  Web view:  {url}")
-    print(f"  Auto-refresh: 120s   ·   Ctrl+C to stop\n")
+    print(f"\n  Web view:  {url}", flush=True)
+    print(f"  Browser auto-refresh: 120s   ·   Ctrl+C to stop", flush=True)
+    print(f"  Upstream fetcher: active=60s · off-hours=30m · off-week=6h\n", flush=True)
     if sys.stdout.isatty() and not os.environ.get("CHIP_NO_OPEN"):
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
     try:

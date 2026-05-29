@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.1.0 — 2026-05-29
+
+### Feat — background fetcher + upstream quota counter
+
+Replaces the per-request upstream fetching model that caused the DataGolf 429 incident on 2026-05-28. Root cause: an iCloud Full Disk Access regression on `/bin/cat` (launchd-spawned children) made `_read_text_resilient` raise on every `picks_history.json` read, so `build_web_data` aborted before populating the 30s cache. Every `/data` poll then re-fired the 3–6 upstream calls; cloudflared exposed this publicly so a handful of clients per minute blew through the 45 req/min ceiling.
+
+- **Background fetcher** (`_fetcher_loop`, daemon thread `upstream-fetcher`): a single loop now owns all upstream calls. Refresh cadence is keyed off `play.status` and day-of-week:
+  - Active / lightning (play live): 60s
+  - Off-hours (overnight pause): 30 min
+  - Concluded: 1 hr
+  - Mon–Wed (no PGA round that week): 6 hr — honors the "don't hit the API outside Thu–Sun" preference
+  - Cold start (no payload yet): 30s
+- `/data` is now a passive reader. Client request rate is fully decoupled from upstream rate — the cloudflared multiplier × cold-rebuild path that caused the incident no longer exists. Returns 503 with `Retry-After` only during the very first warm-up window.
+- Initial synchronous fetch on startup warms the cache before binding the port, so the first client request gets data instead of the polite 503.
+- Replaces the request-driven `DATA_TTL` / cold-fail-backoff branch in `get_cached_data`; the fetcher loop now owns failure semantics. The `_ServiceUnavailable` exception is retained for the cold-start window.
+
+- **Upstream quota counter** (module-level `_QUOTA` / `_quota_record`): instruments `_urlopen_json` to count every outbound DataGolf request grouped by endpoint path. Daily rollover automatically logs `[quota] YYYY-MM-DD: preds/in-play=X live-tournament-stats=Y get-schedule=Z total=N` and resets at midnight local time.
+- **`GET /quota`**: live snapshot endpoint returning per-endpoint counts plus `payload_age_s` (how fresh the cached payload is) and `next_refresh_s` (when the fetcher will tick next).
+
+- Added `threading` to module-level imports (was previously imported only inside `serve_web`).
+- Startup banner now also prints the fetcher cadence; both lines `flush=True` to handle launchd's fully-buffered stdout.
+
 ## v2.0.0 — 2026-05-25
 
 ### Chore: week 14 close-out (CJ Cup Byron Nelson)
