@@ -22,6 +22,34 @@ Outputs:
 
 ---
 
+## Deploy / redeploy on modelhost
+
+**Trigger phrase (type this into Claude on the mini, in this repo):**
+> **"pull and restart the leaderboard"**
+
+Steps — run locally on the mini (no SSH needed; Claude here has local access):
+
+```zsh
+git pull origin main
+launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader   # restart the service
+sleep 2
+lsof -nP -iTCP:8765 -sTCP:LISTEN                               # confirm something is listening
+tail -n 40 ~/Library/Logs/chip-leader.log                     # if NOT listening, the crash is here
+```
+
+- The live view runs as a **KeepAlive LaunchAgent** labeled `com.feitclub.chipleader`
+  (plist in `deploy/launchd/`), executing `chip web 8765`.
+- **If the page won't load at all, read `~/Library/Logs/chip-leader.log` FIRST.** Because
+  KeepAlive is on, a startup crash makes launchd respawn the process every ~10s without ever
+  binding 8765 — so the symptom is a dead page, and the Python traceback in the log is the cause.
+- The DataGolf key is loaded from Keychain at launch
+  (`security find-generic-password -s chip-leader -a datagolf -w`); a missing/locked keychain
+  entry is a common "won't start" cause.
+- Public URL is **chip.ogrady.golf** (Cloudflare tunnel). `modelhost.local:8765` is LAN-only
+  (mDNS) and will not resolve off-network — use the public URL on a phone/cellular.
+
+---
+
 ## What this repo *does not* do
 
 The Wednesday picking pipeline lives in `chip-input`:
