@@ -170,6 +170,59 @@ def fetch_schedule() -> dict[str, dict]:
     _SCHED_CACHE.update(ts=now, by_name=by_name)
     return by_name
 
+def _parse_sched_date(row: dict | None):
+    """Best-effort parse of a schedule row's start date → datetime.date | None."""
+    if not row:
+        return None
+    s = row.get("start_date") or row.get("date") or row.get("event_date")
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(str(s)[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+def next_scheduled_event(after_name: str | None = None) -> dict | None:
+    """Earliest schedule row starting today or later (excluding `after_name`).
+    Returns the row with 'event_name' and 'start_date_obj' (date) attached,
+    or None if the schedule is unavailable / has no future events."""
+    try:
+        sched = fetch_schedule()
+    except Exception:
+        return None
+    today = datetime.now().date()
+    best = None  # (date, row)
+    for name, row in sched.items():
+        if not name or name == after_name:
+            continue
+        d = _parse_sched_date(row)
+        if d is None or d < today:
+            continue
+        if best is None or d < best[0]:
+            best = (d, dict(row, event_name=name, start_date_obj=d))
+    return best[1] if best else None
+
+def format_tee_off(d) -> str:
+    """A date → 'Thursday, June 11'. Falls back to 'Thursday morning'."""
+    if d is None:
+        return "Thursday morning"
+    try:
+        return d.strftime("%A, %B %-d")
+    except Exception:
+        return "Thursday morning"
+
+def clean_event_name(name: str | None) -> str:
+    """Trim sponsor suffix + normalize leading article: e.g.
+    'the Memorial Tournament presented by Workday' → 'The Memorial Tournament'."""
+    if not name:
+        return name or ""
+    n = name.split(" presented by ")[0].strip()
+    if n[:4] == "the ":
+        n = "The " + n[4:]
+    return n
+
 def event_tz(location: str | None) -> ZoneInfo:
     """Parse 'Miami, FL' → ZoneInfo. Falls back to America/New_York."""
     if location and "," in location:
@@ -194,8 +247,14 @@ PLAY_WINDOW_END   = 19  # 7pm event-local
 STALE_FRESH_MIN   = 15  # fresh if last_updated within 15 min
 
 def compute_play_status(info: dict, sched_row: dict | None,
-                        tournament_complete: bool = False) -> dict:
-    """Returns dict with status emoji, label, location, local time, pause flag."""
+                        tournament_complete: bool = False,
+                        next_event: dict | None = None) -> dict:
+    """Returns dict with status emoji, label, location, local time, pause flag.
+
+    When the current event is over AND a future event is on the schedule but
+    hasn't teed off, the status is 'intermission' (the dark window between
+    tournaments — Sunday close-out → Thursday tee-off) and a `dark_card` is
+    attached for the web view to render."""
     location = (sched_row or {}).get("location") or ""
     tz = event_tz(location)
     now_local = datetime.now(tz)
@@ -209,7 +268,28 @@ def compute_play_status(info: dict, sched_row: dict | None,
         age_min = None
 
     sched_status = (sched_row or {}).get("status", "")
-    if sched_status == "completed" or tournament_complete:
+    concluded = sched_status == "completed" or tournament_complete
+    # Intermission: the just-finished event is done and the next event is on the
+    # schedule but hasn't started. This is the expected dark window, NOT an error.
+    dark_card = None
+    if concluded and next_event:
+        start = next_event.get("start_date_obj")
+        if start is not None and start > now_local.date():
+            concluded_name = info.get("event_name") or (sched_row or {}).get("event_name") or "This event"
+            # First-tee timestamp: default 7am in the NEXT event's local tz,
+            # so the web view can render a live countdown to tee-off.
+            nxt_tz = event_tz(next_event.get("location"))
+            tee_dt = datetime(start.year, start.month, start.day, 7, 0, tzinfo=nxt_tz)
+            dark_card = {
+                "concluded": clean_event_name(concluded_name),
+                "next": clean_event_name(next_event.get("event_name")) or "the next event",
+                "tee_off": format_tee_off(start),
+                "tee_off_ts": tee_dt.timestamp(),
+            }
+
+    if dark_card is not None:
+        status, emoji, label = "intermission", "🏁", "Between events"
+    elif concluded:
         status, emoji, label = "concluded", "🔴", "Concluded"
     elif age_min is not None and age_min < STALE_FRESH_MIN:
         status, emoji, label = "active", "🟢", "Live"
@@ -230,6 +310,7 @@ def compute_play_status(info: dict, sched_row: dict | None,
         "status": status,
         "emoji": emoji,
         "label": label,
+        "dark_card": dark_card,
         "location": location,
         "course": (sched_row or {}).get("course", ""),
         "tz_name": tz.key,
@@ -1626,6 +1707,27 @@ body {
 .banner-load { background: #161b22; border: 1px solid #30363d; color: #58a6ff; }
 .banner-err  { background: #160707; border: 1px solid #f85149; color: #f85149; }
 .banner-warn { background: #1c1606; border: 1px solid #d4a843; color: #d4a843; }
+/* Intermission "dark" card — between events, awaiting tee-off */
+.banner-dark {
+  display: none; flex-direction: column; align-items: center; text-align: center;
+  gap: 6px; padding: 22px 18px; margin-bottom: 14px;
+  background: linear-gradient(180deg, #10151c 0%, #0d1117 100%);
+  border: 1px solid #30363d; border-radius: 8px; color: #c9d1d9;
+}
+.banner-dark.visible { display: flex; }
+.banner-dark .dk-flag    { font-size: 30px; line-height: 1; }
+.banner-dark .dk-head    { font-size: 12px; letter-spacing: 3px; color: #6e7681; font-weight: 600; }
+.banner-dark .dk-main    { font-size: 16px; color: #f0f3f6; }
+.banner-dark .dk-main b  { color: #d4a843; font-weight: 600; }
+.banner-dark .dk-sub     { font-size: 13px; color: #8b949e; }
+.banner-dark .dk-count   {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 20px; font-weight: 600; color: #d4a843;
+  letter-spacing: 1px; margin: 6px 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+.banner-dark .dk-count .lbl { color: #6e7681; font-size: 11px; font-weight: 500; letter-spacing: 2px; }
+.banner-dark .dk-cta     { font-size: 12px; color: #6e7681; margin-top: 4px; }
 .dot {
   width: 7px; height: 7px; background: #58a6ff; border-radius: 50%;
   animation: pulse 0.9s ease-in-out infinite; flex-shrink: 0;
@@ -1640,6 +1742,7 @@ body {
   width: 1ch; text-align: center;
 }
 .braille-spin.load    { color: #58a6ff; }
+.braille-spin.dk      { color: #8b949e; }
 .braille-spin.ring    { color: #58a6ff; font-size: 11px; }
 .trend {
   display: inline-block;
@@ -1790,6 +1893,7 @@ tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
   <div class="banner banner-load" id="banner-load"><span class="braille-spin load">⠋</span>Fetching live data…</div>
   <div class="banner banner-err"  id="banner-err"></div>
   <div class="banner banner-warn" id="banner-stale"></div>
+  <div class="banner banner-dark" id="banner-dark"></div>
 
   <div class="tab-pane active" id="tab-pool">
     <div class="tbl-wrap"><table id="tbl-pool">
@@ -1947,12 +2051,37 @@ function setRingPaused() {
   wrap.classList.remove('low');
   label.textContent = '⏸';
 }
+// ── Intermission tee-off countdown ─────────────────────────────────────────────
+let darkTimer = null;
+function stopDarkCountdown() { if (darkTimer) { clearInterval(darkTimer); darkTimer = null; } }
+function startDarkCountdown(ts) {
+  stopDarkCountdown();
+  const el = document.getElementById('dk-countdown');
+  if (!el || !ts) { if (el) el.textContent = ''; return; }
+  function tick() {
+    let s = Math.floor(ts - Date.now() / 1000);
+    if (s <= 0) {
+      el.innerHTML = '⛳ Tee-off underway — fetching live data…';
+      stopDarkCountdown();
+      return;
+    }
+    const d = Math.floor(s / 86400); s -= d * 86400;
+    const h = Math.floor(s / 3600);  s -= h * 3600;
+    const m = Math.floor(s / 60);    const ss = s - m * 60;
+    const pad = n => String(n).padStart(2, '0');
+    const clock = (d > 0 ? d + 'd ' : '') + pad(h) + ':' + pad(m) + ':' + pad(ss);
+    el.innerHTML = '<span class="lbl">TEE-OFF IN</span>&nbsp;&nbsp;' + clock;
+  }
+  tick();
+  darkTimer = setInterval(tick, 1000);
+}
+
 function startTicker() {
   clearInterval(ticker);
   if (document.hidden) { setRingPaused(); return; }
   // FR1: if tournament is outside its 7am-7pm event-local play window,
   // poll every 10 min instead of every 2 min and show ⏸ on the ring.
-  const concluded = playState && playState.status === 'concluded';
+  const concluded = playState && (playState.status === 'concluded' || playState.status === 'intermission');
   const offhours = concluded || (playState && playState.in_play_window === false);
   countdown = offhours ? REFRESH_OFFHOURS : REFRESH;
   if (offhours) { setRingPaused(); }
@@ -2145,6 +2274,25 @@ function renderAll(data) {
     stale.classList.add('visible');
   } else {
     stale.classList.remove('visible');
+  }
+
+  // Intermission "dark" card — between events, awaiting Thursday tee-off.
+  const dark = document.getElementById('banner-dark');
+  if (p.status === 'intermission' && p.dark_card) {
+    const c = p.dark_card;
+    dark.innerHTML =
+      '<div class="dk-flag">🏁</div>' +
+      '<div class="dk-head">INTERMISSION</div>' +
+      '<div class="dk-main"><b>' + escapeHtml(c.concluded) + '</b> has concluded.</div>' +
+      '<div class="dk-main"><b>' + escapeHtml(c.next) + '</b> begins ' + escapeHtml(c.tee_off) + '.</div>' +
+      '<div class="dk-count" id="dk-countdown"></div>' +
+      '<div class="dk-sub"><span class="braille-spin dk">⠋</span>&nbsp;Check back after the first tee-off for live updates&nbsp;<span class="braille-spin dk">⠋</span></div>' +
+      '<div class="dk-cta">In the meantime — current standings below ↓</div>';
+    dark.classList.add('visible');
+    startDarkCountdown(c.tee_off_ts);
+  } else {
+    dark.classList.remove('visible');
+    stopDarkCountdown();
   }
 
   const myEntry = (data.pool_entries || []).find(e => e.is_me);
@@ -2965,11 +3113,16 @@ def build_web_data(args) -> dict:
         pass
 
     sched_row = None
+    next_event = None
     if not args.demo:
         try:
             sched_row = fetch_schedule().get(tournament)
         except Exception:
             sched_row = None
+        try:
+            next_event = next_scheduled_event(after_name=tournament)
+        except Exception:
+            next_event = None
 
     # Auto-pause when every player in the live field has finished R4.
     # Catches the case where the schedule API hasn't flipped to "completed" yet.
@@ -2978,7 +3131,8 @@ def build_web_data(args) -> dict:
         and bool(live)
         and all((p.get("thru") or 0) == 18 for p in live.values())
     )
-    play = compute_play_status(info, sched_row, tournament_complete=tournament_complete)
+    play = compute_play_status(info, sched_row, tournament_complete=tournament_complete,
+                               next_event=next_event)
 
     return {
         "meta": {
@@ -3038,6 +3192,11 @@ def serve_web(args, port: int = 8765) -> None:
             return REFRESH_OFFHOURS
         if status == "concluded":
             return REFRESH_CONCLUDED
+        if status == "intermission":
+            # Between events. On a tournament day this is Thursday-morning
+            # pre-tee-off — poll every 30 min so the board flips to live
+            # promptly once DG starts returning in-play data.
+            return REFRESH_OFFHOURS
         return REFRESH_UNKNOWN
 
     class _ServiceUnavailable(Exception):
