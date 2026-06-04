@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.2.0 — 2026-06-04
+
+### Feat — intermission dark-state view + deploy runbook
+
+Bundles the unreleased work since v2.1.0: a between-events dark state for the web view, and an in-repo redeploy runbook.
+
+- **Intermission dark-state view** (`web: add intermission dark-state view between events`): a new `compute_play_status` `intermission` state, driven by `next_scheduled_event()` off the DataGolf schedule, renders a "has concluded / begins Thursday" card with a live tee-off countdown and braille spinners when the current event is over and the next scheduled event hasn't started. The standings table stays below; the refresh ring pauses; the server polls every 30 min so the board auto-flips to the live view at tee-off.
+- **Intermission fires on tee-off day too** (`intermission: fire on tee-off day too`): the in-play feed keeps returning the just-finished event until the new one produces scores, so on Thursday morning the board showed a stale "prior event R4". The dark card now triggers when the next event starts today or later (was strictly future), with "begins today" wording.
+- **Deploy/redeploy runbook** (`docs: add deploy/redeploy runbook`): CLAUDE.md now documents the "pull and restart the leaderboard" trigger phrase, the `com.feitclub.chipleader` KeepAlive label, the `~/Library/Logs/chip-leader.log` crash-first debugging note, the Keychain key-load failure mode, and the public-vs-LAN URL distinction.
+
 ## v2.1.0 — 2026-05-29
 
 ### Feat — background fetcher + upstream quota counter
