@@ -274,7 +274,11 @@ def compute_play_status(info: dict, sched_row: dict | None,
     dark_card = None
     if concluded and next_event:
         start = next_event.get("start_date_obj")
-        if start is not None and start > now_local.date():
+        today = now_local.date()
+        # Fire on tee-off day too (start == today): the in-play feed still
+        # returns the just-finished event until the new one produces scores,
+        # so without this the board shows a stale "prior event R4" all morning.
+        if start is not None and start >= today:
             concluded_name = info.get("event_name") or (sched_row or {}).get("event_name") or "This event"
             # First-tee timestamp: default 7am in the NEXT event's local tz,
             # so the web view can render a live countdown to tee-off.
@@ -283,7 +287,7 @@ def compute_play_status(info: dict, sched_row: dict | None,
             dark_card = {
                 "concluded": clean_event_name(concluded_name),
                 "next": clean_event_name(next_event.get("event_name")) or "the next event",
-                "tee_off": format_tee_off(start),
+                "tee_off": "today" if start == today else format_tee_off(start),
                 "tee_off_ts": tee_dt.timestamp(),
             }
 
