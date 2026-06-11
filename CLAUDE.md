@@ -30,14 +30,21 @@ Outputs:
 Steps — run locally on the mini (no SSH needed; Claude here has local access):
 
 ```zsh
+git -C ~/dev/chip-input pull origin main                      # DATA repo — picks_history.json/standings symlinked in from here
 cd ~/chip-leader                                              # the live working tree (NOT ~/dev/chip-leader)
-git pull origin main                                          # origin = github.com/jasonogrady/chip-leader.git
+git pull origin main                                          # CODE repo — origin = github.com/jasonogrady/chip-leader.git
 launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader   # restart the service
 sleep 2
 lsof -nP -iTCP:8765 -sTCP:LISTEN                               # confirm something is listening
 tail -n 40 ~/Library/Logs/chip-leader.log                     # if NOT listening, the crash is here
 ```
 
+> **⚠️ Pull `~/dev/chip-input` too — not just this repo.** The leaderboard reads
+> `picks_history.json`/`standings_latest.json` via symlinks into the `chip-input`
+> working tree. Pulling only `chip-leader` leaves the pick data stale, and the live
+> event then resolves by fuzzy fallback — which is how the w17 board showed every
+> entry their *previous* RBC pick (Henley/Heritage) instead of the current one
+> (RBC Canadian Open). Always pull both repos before kickstarting.
 - `origin` is the GitHub remote **`https://github.com/jasonogrady/chip-leader.git`**. (It used to be an
   iCloud copy under `~/Library/Mobile Documents/.../GitHub/chip-leader`; that path is gone — the repo
   moved off iCloud. If `git pull` ever reports the remote "does not appear to be a git repository", the

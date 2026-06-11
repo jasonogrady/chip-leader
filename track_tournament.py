@@ -487,13 +487,36 @@ def load_picks(live_tournament: str) -> tuple[dict[str, str], str]:
     if not resolved or resolved not in known:
         resolved = live_tournament if live_tournament in known else None
     if not resolved:
+        # Fuzzy fallback. Require that ALL of a candidate's distinctive words
+        # appear in the live name (full containment), and among the matches
+        # prefer the most specific (most words). A bare single-token overlap is
+        # NOT enough: "RBC Heritage" and "RBC Canadian Open" share only "RBC",
+        # and the old any-word match would silently resolve the Canadian Open to
+        # Heritage whenever the real entry wasn't in picks_history yet — showing
+        # the wrong pick. Containment makes that impossible.
+        STOP = {"the", "of", "at", "a", "an", "presented", "by", "and"}
+
+        def _sig(name: str) -> set[str]:
+            return {w.lower().strip(".,&") for w in name.split()} - STOP
+
+        live_words = _sig(live_tournament)
+        best, best_n = None, 0
         for t in known:
-            if any(w in live_tournament for w in t.split()):
-                resolved = t
-                break
+            tw = _sig(t)
+            if tw and tw <= live_words and len(tw) > best_n:
+                best, best_n = t, len(tw)
+        resolved = best
+
     if not resolved:
-        sys.exit(f"No picks for '{live_tournament}'.\nKnown: {sorted(known)}\n"
-                 "Add a mapping to LIVE_EVENT_NAME_MAP or run parse_picks.py.")
+        # Unknown event (commonly: picks_history not yet pulled for this week).
+        # Do NOT crash — under the KeepAlive LaunchAgent a sys.exit respawn-loops
+        # into a dead page. Render the live event with no pool attribution so the
+        # board stays up and never shows a stale/wrong pick. Fixes once the
+        # mini's chip-input is pulled and the event lands in picks_history.
+        print(f"[load_picks] no picks for '{live_tournament}' — "
+              f"chip-input picks_history may be stale. Known: {sorted(known)}",
+              file=sys.stderr)
+        return {}, clean_event_name(live_tournament)
 
     picks = {r["entry"]: r["dg_name"] for r in data if r["tournament"] == resolved}
     return picks, resolved
