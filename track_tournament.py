@@ -1067,6 +1067,316 @@ def build_narrative(my_entry, entry_pick, live, standings, proj_rank,
     return lines
 
 
+# ── Story narrative (intermission / round-concluded) ──────────────────────────
+# A second narrative voice that only fires when play is paused: the between-events
+# "final reckoning" and the overnight "round in the books" recaps. Unlike the live
+# narrative (terse, factual, refreshes every 2 min), this one is a structured card:
+# 3-4 mini-charts of key stats with green-up / red-down arrows, then a text-only
+# commissioner recap that is free to laud the winners and barbecue the losers.
+# Tone is intentionally abusive — these are college friends. TKE section is rougher.
+
+def _money_k(v: float) -> str:
+    """Compact money: $3.60M, $420k, $0."""
+    v = v or 0
+    if abs(v) >= 1_000_000:
+        return f"${v/1_000_000:.2f}M"
+    if abs(v) >= 1_000:
+        return f"${v/1_000:.0f}k"
+    return f"${v:.0f}"
+
+def _finish_for_dollars(gap: float) -> str:
+    """Rough English for how big a finish closes a dollar gap (one pick = one event)."""
+    gap = abs(gap or 0)
+    if gap <= 1_000:               return "basically nothing — a good Sunday lunch"
+    if gap <= PRIZE_TIERS["t21_mc"]:  return "a single made cut"
+    if gap <= PRIZE_TIERS["t11_20"]:  return "about a top-20"
+    if gap <= PRIZE_TIERS["t6_10"]:   return "a top-10"
+    if gap <= PRIZE_TIERS["t2_5"]:    return "a top-5"
+    if gap <= PRIZE_TIERS["win"]:     return "an outright win, more or less"
+    return "a win and then some — pray"
+
+def _pick_variant(variants: list[str], seed) -> str:
+    """Deterministic phrasing selector so the snark is stable across refreshes."""
+    if not variants:
+        return ""
+    h = sum(ord(c) for c in str(seed))
+    return variants[h % len(variants)]
+
+def _missed_cut(player: dict | None, cash: float) -> bool:
+    if not player:
+        return False
+    pos = str(player.get("current_pos", "")).upper()
+    if pos.startswith("CUT") or pos in ("MC", "WD", "DQ", "DNS"):
+        return True
+    return (cash <= 0.5) and ((player.get("make_cut") or 0) < 0.5)
+
+def _story_rows(standings, entry_pick, live, proj_rank, current_round, tke_alias):
+    """Enrich every pool entry into one flat record for charts + recap."""
+    rows = []
+    for e in standings:
+        name   = e["entry"]
+        pre    = e["rank"]
+        proj   = proj_rank.get(name, pre)
+        pick   = entry_pick.get(name, "")
+        player = live.get(pick) if pick else None
+        cash   = expected_payout(player) if player else 0.0
+        last   = pick.split(",")[0].strip() if pick else "—"
+        rows.append({
+            "entry":   name,
+            "alias":   tke_alias.get(name) or name,
+            "is_tke":  name in tke_alias,
+            "pre":     pre,
+            "proj":    proj,
+            "delta":   proj - pre,                       # negative = moved UP
+            "pick":    pick,
+            "last":    last,
+            "score":   player.get("current_score") if player else None,
+            "pos":     player.get("current_pos", "") if player else "",
+            # Round-to-par for "today's cards". Use the feed's `today` (always to-par)
+            # rather than _today_with_fallback, which prefers the R{n} field (raw
+            # strokes, e.g. 67) once a player finishes the round.
+            "today":   (player.get("today") if player and player.get("today") is not None
+                        else (player.get("current_score") if player else None)),
+            "cash":    cash,
+            "missed":  _missed_cut(player, cash),
+            "has_player": player is not None,
+            "finish":  proj_finish_label(player) if player else "—",
+        })
+    return rows
+
+def _chart(title, icon, rows):
+    return {"title": title, "icon": icon, "rows": rows}
+
+def _crow(label, sub, value, direction, mag=0):
+    return {"label": label, "sub": sub, "value": value, "dir": direction, "mag": mag}
+
+def build_story_narrative(mode: str, my_entry, entry_pick, live, standings,
+                          proj_rank, n_total, current_round, label,
+                          tke_group=None, next_event=None) -> dict:
+    """Structured recap for paused states. mode ∈ {tournament_intermission,
+    round_concluded}. Returns charts + tournament/tke recap paragraphs."""
+    tke_alias = {e: a for e, a in (tke_group or []) if a}
+    rows = _story_rows(standings, entry_pick, live, proj_rank, current_round, tke_alias)
+    by_entry = {r["entry"]: r for r in rows}
+
+    # Dollar totals per projected rank → "what's needed to move up" math.
+    totals_by_rank = {}
+    for e in standings:
+        name = e["entry"]
+        r = by_entry.get(name)
+        total = (e.get("winnings") or 0) + (r["cash"] if r else 0)
+        totals_by_rank[proj_rank.get(name, e["rank"])] = total
+
+    def gap_up(proj_rank_val):
+        """(dollars, target_rank) needed to pass the entry one spot above."""
+        if proj_rank_val <= 1:
+            return (0, 1)
+        here = totals_by_rank.get(proj_rank_val, 0)
+        above = totals_by_rank.get(proj_rank_val - 1, here)
+        return (max(0, above - here), proj_rank_val - 1)
+
+    rounded = round_label(current_round)
+    round_event = (mode == "round_concluded")
+
+    # ── Charts ────────────────────────────────────────────────────────────────
+    charts = []
+    movers = [r for r in rows if r["has_player"]]
+    risers  = sorted([r for r in movers if r["delta"] < 0], key=lambda r: r["delta"])[:3]
+    fallers = sorted([r for r in movers if r["delta"] > 0], key=lambda r: -r["delta"])[:3]
+    mv_rows = []
+    for r in risers:
+        mv_rows.append(_crow(r["entry"], r["last"], f"#{r['pre']}→#{r['proj']}", "up", abs(r["delta"])))
+    for r in fallers:
+        mv_rows.append(_crow(r["entry"], r["last"], f"#{r['pre']}→#{r['proj']}", "down", r["delta"]))
+    if mv_rows:
+        charts.append(_chart("Pool movers" if not round_event else f"{rounded} movers",
+                             "📈", mv_rows))
+
+    # Week's cash / today's cards
+    if round_event:
+        carded = [r for r in movers if r["today"] is not None]
+        best = sorted(carded, key=lambda r: r["today"])[:3]
+        worst = sorted(carded, key=lambda r: -r["today"])[:2]
+        cards = [_crow(r["entry"], r["last"], fmt_score(r["today"]), "up", -(r["today"] or 0)) for r in best]
+        cards += [_crow(r["entry"], r["last"], fmt_score(r["today"]), "down", r["today"] or 0) for r in worst]
+        if cards:
+            charts.append(_chart(f"{rounded} cards (today)", "🔥", cards))
+    else:
+        earners = sorted([r for r in movers if r["cash"] > 0], key=lambda r: -r["cash"])[:4]
+        cash_rows = [_crow(r["entry"], r["last"], _money_k(r["cash"]), "up", r["cash"]) for r in earners]
+        eggs = sorted([r for r in movers if r["missed"]], key=lambda r: r["pre"])[:2]
+        cash_rows += [_crow(r["entry"], f"{r['last']} · MC", "$0", "down", 0) for r in eggs]
+        if cash_rows:
+            charts.append(_chart("Week's cash", "💰", cash_rows))
+
+    # TKE movement chart (cohort only)
+    tke_rows_all = [r for r in rows if r["is_tke"] and r["has_player"]]
+    tke_up   = sorted([r for r in tke_rows_all if r["delta"] < 0], key=lambda r: r["delta"])[:3]
+    tke_down = sorted([r for r in tke_rows_all if r["delta"] > 0], key=lambda r: -r["delta"])[:3]
+    tke_chart_rows = []
+    for r in tke_up:
+        tke_chart_rows.append(_crow(r["alias"], r["last"], f"#{r['pre']}→#{r['proj']}", "up", abs(r["delta"])))
+    for r in tke_down:
+        tke_chart_rows.append(_crow(r["alias"], r["last"], f"#{r['pre']}→#{r['proj']}", "down", r["delta"]))
+    if tke_chart_rows:
+        charts.append(_chart("TKE movers 🐉", "🐉", tke_chart_rows))
+
+    # Picks: heroes & zeros (dedup by golfer)
+    seen = set()
+    heroes = []
+    for r in sorted([r for r in movers if not r["missed"] and r["score"] is not None],
+                    key=lambda r: r["score"]):
+        if r["last"] in seen:
+            continue
+        seen.add(r["last"]); heroes.append(r)
+        if len(heroes) >= 3:
+            break
+    zeros_seen = set(); zeros = []
+    for r in [r for r in movers if r["missed"]]:
+        if r["last"] in zeros_seen:
+            continue
+        zeros_seen.add(r["last"]); zeros.append(r)
+        if len(zeros) >= 3:
+            break
+    pick_rows = [_crow(r["last"], r["pos"] or r["finish"], fmt_score(r["score"]), "up", -(r["score"] or 0)) for r in heroes]
+    pick_rows += [_crow(r["last"], "missed cut", "MC", "down", 0) for r in zeros]
+    if pick_rows and not round_event:
+        charts.append(_chart("Picks: heroes & zeros", "🎯", pick_rows))
+
+    charts = charts[:4]
+
+    # ── Recap text ──────────────────────────────────────────────────────────
+    proj_sorted = sorted(rows, key=lambda r: r["proj"])
+    leader = proj_sorted[0] if proj_sorted else None
+    me = by_entry.get(my_entry)
+
+    tournament, tke = _story_recap(
+        mode, rounded, label, leader, risers, fallers, rows, movers,
+        me, my_entry, n_total, gap_up, tke_rows_all, tke_alias, next_event)
+
+    if mode == "tournament_intermission":
+        kicker = "🏁 INTERMISSION"
+        headline = f"{clean_event_name(label)} — Final Reckoning"
+        nxt = clean_event_name(next_event.get("event_name")) if next_event else None
+        subhead = f"The dust has settled. {nxt} is next." if nxt else "The dust has settled."
+    else:
+        kicker = f"🌙 {rounded.upper()} IN THE BOOKS"
+        headline = f"With {rounded} concluded, here's where we stand"
+        subhead = f"{clean_event_name(label)} · overnight standings"
+
+    return {
+        "mode":       mode,
+        "kicker":     kicker,
+        "headline":   headline,
+        "subhead":    subhead,
+        "charts":     charts,
+        "tournament": tournament,
+        "tke":        tke,
+    }
+
+def round_label(current_round) -> str:
+    return f"Round {current_round}" if isinstance(current_round, int) else "This round"
+
+def _story_recap(mode, rounded, label, leader, risers, fallers, rows, movers,
+                 me, my_entry, n_total, gap_up, tke_rows_all, tke_alias, next_event):
+    """Commissioner voice. tournament[] = pool-wide; tke[] = double snark."""
+    final = (mode == "tournament_intermission")
+    tournament, tke = [], []
+
+    # ── TOURNAMENT recap ──
+    if leader:
+        verb = "takes the week" if final else "sits atop the board"
+        laud = _pick_variant([
+            f"{leader['entry']} {verb} — {leader['last']} ({leader['pos'] or leader['finish']}) did the heavy lifting. Pour one out, the rest of you.",
+            f"Top of the pile: {leader['entry']}, riding {leader['last']} to {leader['pos'] or leader['finish']}. Annoyingly good.",
+            f"{leader['entry']} {verb}. {leader['last']} delivered and now we all have to hear about it.",
+        ], leader["entry"])
+        tournament.append(laud)
+
+    if risers:
+        r = risers[0]
+        tournament.append(_pick_variant([
+            f"Biggest climb of the week: {r['entry']} rocketed {abs(r['delta'])} spots (#{r['pre']}→#{r['proj']}) on the back of {r['last']}. Somebody finally read a course preview.",
+            f"{r['entry']} jumped {abs(r['delta'])} — #{r['pre']} to #{r['proj']}. {r['last']} cashed, and {r['entry']} looks like a genius for exactly one week.",
+            f"Mover of the week is {r['entry']}, up {abs(r['delta'])} thanks to {r['last']}. Enjoy it, regression is undefeated.",
+        ], r["entry"]))
+
+    if fallers:
+        f = fallers[0]
+        tournament.append(_pick_variant([
+            f"And the faceplant award goes to {f['entry']}, who fell {f['delta']} spots (#{f['pre']}→#{f['proj']}). {f['last']} no-showed. Brutal. No notes, just laughter.",
+            f"{f['entry']} coughed up {f['delta']} places riding {f['last']}. That pick aged like milk in a hot car.",
+            f"Somebody check on {f['entry']} — down {f['delta']} after {f['last']} forgot golf is the objective.",
+        ], f["entry"]))
+
+    if final:
+        eggs = [r for r in movers if r["missed"]]
+        if eggs:
+            names = ", ".join(f"{r['entry']} ({r['last']})" for r in sorted(eggs, key=lambda r: r["pre"])[:4])
+            extra = f" and {len(eggs)-4} more" if len(eggs) > 4 else ""
+            tournament.append(
+                f"Goose eggs 🥚 — {len(eggs)} entries got nothing because their guy packed up Friday: {names}{extra}. "
+                "Picking a man who tees off twice and drives home is a choice. A bad one."
+            )
+    else:
+        surprises = [r for r in movers if r["delta"] < -8]
+        if len(surprises) >= 1:
+            s = surprises[min(1, len(surprises)-1)]
+            tournament.append(
+                f"Surprise of {rounded.lower()}: {s['entry']} ({s['last']}) crashed the party from nowhere, #{s['pre']}→#{s['proj']}. "
+                "Nobody saw it, nobody believes it lasts."
+            )
+
+    # My entry: status + what's needed to climb
+    if me and me["has_player"]:
+        gap, tgt = gap_up(me["proj"])
+        if me["proj"] == 1:
+            need = "You're #1. Try not to choke it away."
+        else:
+            need = (f"To pass #{tgt} you need {_money_k(gap)} — {_finish_for_dollars(gap)}. "
+                    f"Currently leaning on {me['last']} ({me['pos'] or me['finish']}).")
+        tournament.append(f"You ({my_entry}) sit #{me['proj']} of {n_total}. {need}")
+
+    # ── TKE recap — double the snark ──
+    tke_sorted = sorted(tke_rows_all, key=lambda r: r["proj"])
+    if tke_sorted:
+        top = tke_sorted[0]
+        tke.append(_pick_variant([
+            f"🐉 TKE crown (for now): {top['alias']} at pool #{top['proj']}, riding {top['last']}. Insufferable already, and it's only going to get worse.",
+            f"{top['alias']} leads the TKE pack — {top['last']} carried him to #{top['proj']}. Reminder that even a blind squirrel finds a nut.",
+            f"Atop the brotherhood: {top['alias']} (#{top['proj']}). {top['last']} did the work; {top['alias']} will take the credit at the reunion.",
+        ], top["alias"]))
+
+        tke_fallers = sorted([r for r in tke_rows_all if r["delta"] > 0], key=lambda r: -r["delta"])
+        if tke_fallers:
+            tf = tke_fallers[0]
+            tke.append(_pick_variant([
+                f"{tf['alias']} face-planted {tf['delta']} spots with {tf['last']}. A pick so bad it should be studied. Frame it. Hang it. Apologize to the group chat.",
+                f"Hall of shame: {tf['alias']}, down {tf['delta']} on {tf['last']}. Were you picking with your eyes closed or just your heart? Embarrassing either way.",
+                f"{tf['alias']} torched {tf['delta']} places thanks to {tf['last']}. That's not a fantasy pick, that's a cry for help.",
+            ], tf["alias"]))
+
+        tke_eggs = [r for r in tke_rows_all if r["missed"]]
+        if tke_eggs:
+            names = ", ".join(f"{r['alias']} ({r['last']})" for r in tke_eggs[:5])
+            tke.append(
+                f"TKE goose eggs 🥚: {names}. Zero dollars. Zero defense. "
+                "You had one job — pick a guy who plays four rounds — and you fumbled it. Venmo your dignity to the pot."
+            )
+
+        my_t = next((i for i, r in enumerate(tke_sorted, 1) if r["entry"] == my_entry), None)
+        if my_t:
+            n_tke = len(tke_sorted)
+            if my_t == 1:
+                tke.append(f"And yes, you're #1 of {n_tke} in the TKE group. Gloat responsibly.")
+            elif my_t > n_tke - 3:
+                tke.append(f"You're #{my_t} of {n_tke} in the group — basement-adjacent. The boys have noticed. They always notice.")
+            else:
+                tke.append(f"You're #{my_t} of {n_tke} in the group. Mid. Aggressively mid.")
+
+    return tournament, tke
+
+
 # ── SG watchlist panel ───────────────────────────────────────────────────────
 
 def render_sg_panel(watchlist: list[str], sg_by_round: dict[str, dict],
@@ -1854,6 +2164,36 @@ tr.me.tke td { color: #d4a843; }   /* "me" wins over tke */
 .nar-section:first-child { margin-top: 0; }
 .nar-p { font-size: 12.5px; line-height: 1.65; margin-bottom: 8px; color: #c9d1d9; }
 
+/* ── Story recap (intermission / round-concluded) ── */
+.story-head { margin-bottom: 14px; }
+.story-kicker { color: #d29922; font-size: 11px; font-weight: 800;
+  letter-spacing: 2px; text-transform: uppercase; }
+.story-headline { color: #f0f6fc; font-size: 20px; font-weight: 800;
+  line-height: 1.2; margin-top: 4px; }
+.story-sub { color: #8b949e; font-size: 12.5px; margin-top: 3px; }
+
+.story-charts { display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 12px; margin: 6px 0 18px; }
+.mini-chart { background: #0d1117; border: 1px solid #21262d;
+  border-radius: 8px; padding: 11px 13px; }
+.mc-title { color: #8b949e; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .6px; text-transform: uppercase; margin-bottom: 8px; }
+.mc-row { display: flex; align-items: baseline; gap: 8px;
+  padding: 3px 0; font-size: 12.5px; }
+.mc-arrow { font-size: 11px; line-height: 1; width: 11px; flex: 0 0 auto; }
+.mc-arrow.up   { color: #3fb950; }
+.mc-arrow.down { color: #f85149; }
+.mc-arrow.flat { color: #6e7681; }
+.mc-label { color: #e6edf3; flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-sub { color: #6e7681; font-size: 11px; }
+.mc-val { color: #c9d1d9; font-variant-numeric: tabular-nums;
+  font-weight: 600; flex: 0 0 auto; }
+.mc-row.up   .mc-val { color: #3fb950; }
+.mc-row.down .mc-val { color: #f85149; }
+@media (max-width: 768px) { .story-charts { grid-template-columns: 1fr; }
+  .story-headline { font-size: 17px; } }
+
 /* ── Footer ── */
 .footer { text-align: center; color: #484f58; font-size: 11px;
   padding: 14px; border-top: 1px solid #1c2128; margin-top: 20px; }
@@ -2292,6 +2632,51 @@ function renderNarrative(lines) {
   el.innerHTML = html || '<p class="nar-p dim">No narrative available.</p>';
 }
 
+// Structured paused-state recap: mini-charts (green ▲ / red ▼) + commissioner text.
+function renderNarrativeCard(narr) {
+  const el = document.getElementById('narrative-content');
+  const arrow = (d) => d === 'up' ? '<span class="mc-arrow up">▲</span>'
+                     : d === 'down' ? '<span class="mc-arrow down">▼</span>'
+                     : '<span class="mc-arrow flat">▬</span>';
+  let html = '';
+  html += '<div class="story-head">';
+  if (narr.kicker)   html += '<div class="story-kicker">' + escapeHtml(narr.kicker) + '</div>';
+  if (narr.headline) html += '<div class="story-headline">' + escapeHtml(narr.headline) + '</div>';
+  if (narr.subhead)  html += '<div class="story-sub">' + escapeHtml(narr.subhead) + '</div>';
+  html += '</div>';
+
+  const charts = narr.charts || [];
+  if (charts.length) {
+    html += '<div class="story-charts">';
+    for (const c of charts) {
+      html += '<div class="mini-chart"><div class="mc-title">' +
+              (c.icon ? escapeHtml(c.icon) + ' ' : '') + escapeHtml(c.title) + '</div>';
+      for (const r of (c.rows || [])) {
+        html += '<div class="mc-row ' + (r.dir || 'flat') + '">' +
+                  arrow(r.dir) +
+                  '<span class="mc-label">' + escapeHtml(r.label) +
+                    (r.sub ? '<span class="mc-sub"> · ' + escapeHtml(r.sub) + '</span>' : '') +
+                  '</span>' +
+                  '<span class="mc-val">' + escapeHtml(String(r.value)) + '</span>' +
+                '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  const section = (title, paras) => {
+    if (!paras || !paras.length) return '';
+    let s = '<div class="nar-section">' + escapeHtml(title) + '</div>';
+    for (const p of paras) s += '<p class="nar-p">' + escapeHtml(p) + '</p>';
+    return s;
+  };
+  html += section('Tournament', narr.tournament);
+  html += section('Top TKE 🐉', narr.tke);
+
+  el.innerHTML = html || '<p class="nar-p dim">No narrative available.</p>';
+}
+
 // ── Render all ────────────────────────────────────────────────────────────────
 function renderAll(data) {
   const m = data.meta;
@@ -2351,7 +2736,8 @@ function renderAll(data) {
   renderPool(data.pool_entries || []);
   renderTournament(data.tournament_top || [], myPick);
   renderTKE(data.tke_rows || []);
-  renderNarrative(data.narrative_lines || []);
+  if (data.narrative) renderNarrativeCard(data.narrative);
+  else renderNarrative(data.narrative_lines || []);
 }
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
@@ -2368,7 +2754,10 @@ function fetchData() {
   btn.disabled = true;
   btn.innerHTML = '<span class="braille-spin load">⠋</span> Updating';
 
-  fetch('/data')
+  // Forward ?preview=intermission|round from the page URL so the paused-state
+  // recap card can be previewed mid-tournament (debug/prototype aid).
+  const _pv = new URLSearchParams(location.search).get('preview');
+  fetch('/data' + (_pv ? '?preview=' + encodeURIComponent(_pv) : ''))
     .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(data => {
       loading = false;
@@ -2989,8 +3378,27 @@ def _today_with_fallback(player: dict, current_round: int):
     return total - prior
 
 
-def build_web_data(args) -> dict:
-    """Fetch live data and build JSON payload for the web view."""
+def detect_narrative_mode(play: dict, current_round, live: dict) -> str | None:
+    """Which paused-state recap (if any) applies right now.
+    - tournament_intermission: event over, between events.
+    - round_concluded: overnight pause mid-event with the round's field finished.
+    Returns None during live play (the live narrative_lines drive the card then)."""
+    status = (play or {}).get("status")
+    if status in ("intermission", "concluded"):
+        return "tournament_intermission"
+    if status == "off-hours" and isinstance(current_round, int) and 1 <= current_round <= 3 and live:
+        finished = sum(1 for p in live.values() if (p.get("thru") or 0) == 18)
+        if finished / max(1, len(live)) > 0.7:
+            return "round_concluded"
+    return None
+
+
+def build_web_data(args, force_mode: str | None = None) -> dict:
+    """Fetch live data and build JSON payload for the web view.
+
+    force_mode (debug/preview only): force a paused-state recap mode regardless of
+    actual play status, so the intermission/round-concluded card can be previewed
+    mid-tournament. Wired to the `?preview=` query param on /data."""
     if args.demo:
         info, live = demo_inplay()
         sg_by_round = demo_sg_splits()
@@ -3184,6 +3592,20 @@ def build_web_data(args) -> dict:
     play = compute_play_status(info, sched_row, tournament_complete=tournament_complete,
                                next_event=next_event)
 
+    # Structured paused-state recap (charts + commissioner snark). Built only when
+    # play is paused (or forced for preview); the live view keeps narrative_lines.
+    nmode = force_mode or detect_narrative_mode(play, current_round, live)
+    story = None
+    if nmode in ("tournament_intermission", "round_concluded"):
+        try:
+            story = build_story_narrative(
+                nmode, args.my_entry, entry_pick, live, standings, proj_rank,
+                n_total, current_round, label, tke_group=TKE_GROUP, next_event=next_event)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            story = None
+
     return {
         "meta": {
             "tournament":    label,
@@ -3199,6 +3621,7 @@ def build_web_data(args) -> dict:
         "tournament_top":  tournament_top,
         "tke_rows":        tke_rows,
         "narrative_lines": narrative_lines,
+        "narrative":       story,
     }
 
 
@@ -3328,7 +3751,20 @@ def serve_web(args, port: int = 8765) -> None:
                 self._serve_asset(path)
             elif path == "/data":
                 try:
-                    data = get_cached_data()
+                    from urllib.parse import parse_qs
+                    qs = parse_qs(urlparse(self.path).query)
+                    preview = (qs.get("preview") or [None])[0]
+                    _PREVIEW_MODES = {
+                        "intermission": "tournament_intermission",
+                        "round": "round_concluded",
+                    }
+                    if preview in _PREVIEW_MODES:
+                        # Debug-only: rebuild fresh with a forced recap mode. Bypasses
+                        # the cache and is never stored (no-store), so it can't pin a
+                        # synthetic payload for real clients.
+                        data = build_web_data(args, force_mode=_PREVIEW_MODES[preview])
+                    else:
+                        data = get_cached_data()
                     body = json.dumps(data).encode()
                     import hashlib
                     etag_src = str(data.get("meta", {}).get("last_update", "")) + "|" + str(len(body))

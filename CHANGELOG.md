@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.3.0 — 2026-06-11
+
+### Feat — story narrative: intermission & round-concluded commissioner recap
+
+A second narrative voice that only fires when play is paused — the between-events "final reckoning" and the overnight "round in the books" recaps. Where the live narrative is terse and factual, this is a structured card: up to four mini-charts with green ▲ / red ▼ arrows, followed by a commissioner recap that lauds the winners and barbecues the losers (with a rougher TKE-only section).
+
+- `build_story_narrative` + `_story_recap`: chart and recap builders. Deterministic snark phrasing (stable across the 2-min refresh so the card doesn't reshuffle), plus dollar-gap "what's needed to climb a spot" math off the standings.
+- Charts: pool movers, week's cash (or today's cards in round mode), TKE movers, and pick heroes/zeros — capped at four, deduped by golfer.
+- `detect_narrative_mode`: fires on `intermission`/`concluded`, or an overnight `round_concluded` pause when >70% of the field is through 18. Returns `None` during live play, so the live `narrative_lines` keep driving the card then.
+- `build_web_data` emits the `narrative` payload; client `renderNarrativeCard` renders it and falls back to `narrative_lines` when absent.
+- `?preview=intermission|round` debug hook on `/data` rebuilds fresh with a forced mode (`no-store`, never cached) so the card can be previewed mid-tournament without waiting for a real pause.
+
+A companion end-of-season `season_intermission` mode is scoped in `BACKLOG.md` (planned, not built).
+
 ## v2.2.2 — 2026-06-10
 
 ### Fix — intermission never fired because the two upstream feeds name events differently

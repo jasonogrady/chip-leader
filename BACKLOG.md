@@ -2,6 +2,84 @@
 
 Gameday-only fork of chip-input. Picking-pipeline backlog stays in chip-input.
 
+## PLANNED — Season Intermission mode (end-of-season recap) 🏆
+
+> Status: **planned, not built.** Companion to the two shipped paused-state recaps
+> (`tournament_intermission`, `round_concluded` — see `build_story_narrative` in
+> `track_tournament.py`). This one fires once a year, after the final tournament of
+> the season concludes, and replaces the "next event begins Thursday" framing with a
+> full-season closing ceremony. Same card shape (mini-charts + commissioner snark),
+> but the unit of analysis is the **whole season**, not one event.
+
+### Trigger / detection
+- New mode string: `season_intermission`.
+- Fires when the just-concluded event is the **last event of the season** AND it has
+  concluded (play.status concluded/intermission). Detect "last event" via the
+  schedule feed: no `next_scheduled_event(after_name=...)` with a start date in the
+  current season (i.e., `next_event is None`, or the next event is the following
+  season opener far in the future — guard with a configurable season-end date or a
+  gap > ~21 days to the next event).
+- Extend `detect_narrative_mode()`: if `tournament_intermission` would fire but there
+  is no in-season next event, return `season_intermission` instead.
+- Add `?preview=season` to the `/data` preview map for prototyping (same pattern as
+  `intermission` / `round`).
+
+### Data needs (the hard part — most of this does NOT exist in chip-leader yet)
+chip-leader currently only sees the CURRENT event live + the latest season-to-date
+standings snapshot. A true season recap needs season-spanning history:
+- **Season arc per entry:** rank at season start vs final rank, total winnings, total
+  FedEx, cuts made/missed over the year, best & worst single-week finishes. Most of
+  this is derivable from `standings_latest.json` (final) + the *first* standings
+  snapshot of the season — but chip-leader keeps only the latest. **Decision needed:**
+  either (a) chip-input emits a `season_history.json` (per-week standings + per-week
+  pick results), or (b) chip-leader archives each week's `standings_latest.json` into
+  `standings/history/` on the fly during the year. (a) is cleaner; belongs in
+  chip-input. File a matching todo there.
+- **Per-week pick results:** `picks_history.json` already holds every entry's pick per
+  tournament. Cross with weekly results (winnings per pick) to compute season
+  superlatives (best pick of the year, most goose eggs, etc.). Weekly results live in
+  chip-input (`Results/`), not here — needs an export.
+
+### Charts (4, season-scaled)
+1. **📈 Season movers** — biggest rank climbers & fallers, season start → final.
+2. **💰 Season earnings** — top earners for the year (and the cellar).
+3. **🐉 TKE final table** — the within-group final standings + season Δ.
+4. **🎯 Picks of the year** — best single pick (most $ in one week) vs the biggest
+   goose-egg collectors (count of $0 weeks).
+
+### Narrative sections (commissioner closing ceremony — max snark)
+- **Champion** — crown the pool winner; full laud, name the season-defining picks.
+- **TKE champion** — crown the group winner (this is the one that matters for the
+  reunion). Double snark for everyone below them.
+- **Season superlatives / awards:** Most Improved, Biggest Collapse, Mr. Consistent,
+  Captain Goose-Egg (most $0 weeks), Best Single Pick, Worst Single Pick, Cut-Line
+  Cardiac (most weeks decided at the cut), and a roast for whoever finished last.
+- **My-entry season wrap** (`TIGER WOODS YALL!`): final rank, season Δ, a line on what
+  it would've taken to climb a tier, and a forward look to next year.
+- Tone: same "we're all adults and friends from college" register; TKE section twice
+  as brutal. End on a kicker line ("See you in [next season], try harder").
+
+### UI / rendering
+- Reuse `renderNarrativeCard()` as-is (mode-agnostic). Add a `season_intermission`
+  kicker ("🏆 SEASON FINALE") + headline ("[Year] — Final Standings").
+- The dark-card banner (`banner-dark`) currently says "next event begins Thursday" —
+  suppress or reword it for season mode ("That's a wrap on [year]. No next event.").
+- Optional: a small season-champion hero/ribbon above the charts.
+
+### TODO checklist
+- [ ] **chip-input:** emit `season_history.json` (per-week standings) + per-week pick
+      results export, OR confirm `Results/` is sufficient to reconstruct. (blocking)
+- [ ] chip-leader: archive weekly `standings_latest.json` → `standings/history/YYYY-Www.json`
+      as a fallback if chip-input export slips. (cheap insurance, do early in season)
+- [ ] `detect_narrative_mode()`: add `season_intermission` (no in-season next event).
+- [ ] `build_story_narrative()`: add the `season_intermission` branch (charts + awards).
+- [ ] Season superlative computations (Most Improved, Captain Goose-Egg, etc.).
+- [ ] `/data` preview: add `season` → `season_intermission`.
+- [ ] `renderNarrativeCard()`: season kicker/headline + suppress/reword dark banner.
+- [ ] Prototype via `?preview=season`, screenshot, calibrate tone.
+- [ ] Decide season-end detection: gap-to-next-event threshold vs hardcoded date.
+
+
 ## Past gameday playbook — CJ Cup Byron Nelson (2026-05-21 to 2026-05-24)
 
 **Outcome (closed out 2026-05-25, v2.0.0):**
