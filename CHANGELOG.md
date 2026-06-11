@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.2.1 — 2026-06-10
+
+### Fix — `no-store` on dynamic routes so the public URL can't serve a stale board
+
+The public `chip.ogrady.golf` URL showed a stale live-tournament board during the intermission window while LAN (`modelhost.local:8765`) correctly showed the dark state. Root cause: the page is a static shell that client-side-polls `/data` for dark-vs-live state, and `/data` shipped `Cache-Control: no-cache` (store-but-revalidate). A Cloudflare edge cache pinned the last live `/data` snapshot and served it publicly; LAN bypasses Cloudflare, so only the public URL was affected.
+
+- `/`, `/data` (200 + 304), and `/quota` now send `Cache-Control: no-store` so no edge/browser ever stores live state. Static assets (`/icon.svg`, `/assets/*`) keep `public, max-age=86400`.
+- Operational follow-up (not code): purge the Cloudflare cache once to drop the already-pinned snapshot, and ensure any "Cache Everything" rule excludes `/data` (or sets Edge TTL to "respect existing headers").
+
 ## v2.2.0 — 2026-06-04
 
 ### Feat — intermission dark-state view + deploy runbook

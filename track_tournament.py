@@ -3247,6 +3247,11 @@ def serve_web(args, port: int = 8765) -> None:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", len(body))
+                # no-store: the shell + its /data poll drive dark-vs-live state.
+                # Without this an edge cache (Cloudflare "cache everything") can
+                # pin a stale live-tournament snapshot — LAN bypasses it, public
+                # serves the cached copy. See deploy/cloudflared/SETUP.md.
+                self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 self.wfile.write(body)
             elif path in ("/icon.svg", "/apple-touch-icon.png", "/favicon.ico"):
@@ -3285,13 +3290,16 @@ def serve_web(args, port: int = 8765) -> None:
                     if self.headers.get("If-None-Match") == etag:
                         self.send_response(304)
                         self.send_header("ETag", etag)
-                        self.send_header("Cache-Control", "no-cache")
+                        self.send_header("Cache-Control", "no-store")
                         self.end_headers()
                         return
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Content-Length", len(body))
-                    self.send_header("Cache-Control", "no-cache")
+                    # no-store, not no-cache: live leaderboard JSON must never be
+                    # stored by an intermediary. ETag is retained for conditional
+                    # GETs from clients that still revalidate.
+                    self.send_header("Cache-Control", "no-store")
                     self.send_header("ETag", etag)
                     self.end_headers()
                     self.wfile.write(body)
@@ -3324,7 +3332,7 @@ def serve_web(args, port: int = 8765) -> None:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", len(body))
-                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 self.wfile.write(body)
             else:
