@@ -1287,92 +1287,93 @@ def _story_recap(mode, rounded, label, leader, risers, fallers, rows, movers,
     if leader:
         verb = "takes the week" if final else "sits atop the board"
         laud = _pick_variant([
-            f"{leader['entry']} {verb} — {leader['last']} ({leader['pos'] or leader['finish']}) did the heavy lifting. Pour one out, the rest of you.",
-            f"Top of the pile: {leader['entry']}, riding {leader['last']} to {leader['pos'] or leader['finish']}. Annoyingly good.",
-            f"{leader['entry']} {verb}. {leader['last']} delivered and now we all have to hear about it.",
+            f"{leader['entry']} {verb} — {leader['last']} ({leader['pos'] or leader['finish']}) did the heavy lifting while the rest of you fumbled around in the dark. Pour one out, peasants.",
+            f"Top of the pile: {leader['entry']}, riding {leader['last']} to {leader['pos'] or leader['finish']}. Annoyingly good, and we'll never hear the end of it.",
+            f"{leader['entry']} {verb}. {leader['last']} delivered. Everyone else, kindly take a number and a seat.",
         ], leader["entry"])
         tournament.append(laud)
 
     if risers:
         r = risers[0]
         tournament.append(_pick_variant([
-            f"Biggest climb of the week: {r['entry']} rocketed {abs(r['delta'])} spots (#{r['pre']}→#{r['proj']}) on the back of {r['last']}. Somebody finally read a course preview.",
-            f"{r['entry']} jumped {abs(r['delta'])} — #{r['pre']} to #{r['proj']}. {r['last']} cashed, and {r['entry']} looks like a genius for exactly one week.",
-            f"Mover of the week is {r['entry']}, up {abs(r['delta'])} thanks to {r['last']}. Enjoy it, regression is undefeated.",
+            f"Biggest climb of the week: {r['entry']} rocketed {abs(r['delta'])} spots (#{r['pre']}→#{r['proj']}) on {r['last']}'s back. Even a stopped clock, etc. Frame the receipt, it won't happen twice.",
+            f"{r['entry']} jumped {abs(r['delta'])} — #{r['pre']} to #{r['proj']}. {r['last']} cashed and now {r['entry']} thinks they're good at this. They are not. Enjoy the week.",
+            f"Mover of the week: {r['entry']}, up {abs(r['delta'])} on {r['last']}. Soak it in. Regression is undefeated and it knows where you live.",
         ], r["entry"]))
 
     if fallers:
         f = fallers[0]
         tournament.append(_pick_variant([
-            f"And the faceplant award goes to {f['entry']}, who fell {f['delta']} spots (#{f['pre']}→#{f['proj']}). {f['last']} no-showed. Brutal. No notes, just laughter.",
-            f"{f['entry']} coughed up {f['delta']} places riding {f['last']}. That pick aged like milk in a hot car.",
-            f"Somebody check on {f['entry']} — down {f['delta']} after {f['last']} forgot golf is the objective.",
+            f"The faceplant award goes to {f['entry']}, who ate {f['delta']} spots (#{f['pre']}→#{f['proj']}) because {f['last']} no-showed. Brutal. No notes. Just pointing and laughing.",
+            f"{f['entry']} coughed up {f['delta']} places riding {f['last']}. That pick aged like milk left on a dashboard in July. Disgraceful work.",
+            f"Somebody do a welfare check on {f['entry']} — down {f['delta']} after {f['last']} apparently forgot golf was the assignment. Embarrassing for the whole family.",
         ], f["entry"]))
 
     if final:
         eggs = [r for r in movers if r["missed"]]
         if eggs:
             names = ", ".join(f"{r['entry']} ({r['last']})" for r in sorted(eggs, key=lambda r: r["pre"])[:4])
-            extra = f" and {len(eggs)-4} more" if len(eggs) > 4 else ""
+            extra = f" and {len(eggs)-4} other clowns" if len(eggs) > 4 else ""
             tournament.append(
-                f"Goose eggs 🥚 — {len(eggs)} entries got nothing because their guy packed up Friday: {names}{extra}. "
-                "Picking a man who tees off twice and drives home is a choice. A bad one."
+                f"Goose eggs 🥚 — {len(eggs)} of you took a clean zero because your guy was in the parking lot by Friday dinner: {names}{extra}. "
+                "Picking a man who tees off twice and drives home is a decision. A profoundly stupid one. Do better."
             )
     else:
         surprises = [r for r in movers if r["delta"] < -8]
         if len(surprises) >= 1:
             s = surprises[min(1, len(surprises)-1)]
             tournament.append(
-                f"Surprise of {rounded.lower()}: {s['entry']} ({s['last']}) crashed the party from nowhere, #{s['pre']}→#{s['proj']}. "
-                "Nobody saw it, nobody believes it lasts."
+                f"Surprise of {rounded.lower()}: {s['entry']} ({s['last']}) crashed the party from absolutely nowhere, #{s['pre']}→#{s['proj']}. "
+                "Nobody saw it coming, nobody respects it, and nobody thinks it survives the weekend."
             )
 
     # My entry: status + what's needed to climb
     if me and me["has_player"]:
         gap, tgt = gap_up(me["proj"])
         if me["proj"] == 1:
-            need = "You're #1. Try not to choke it away."
+            need = "You're #1. Now try not to choke it away like you always threaten to."
         else:
             need = (f"To pass #{tgt} you need {_money_k(gap)} — {_finish_for_dollars(gap)}. "
-                    f"Currently leaning on {me['last']} ({me['pos'] or me['finish']}).")
+                    f"You're leaning on {me['last']} ({me['pos'] or me['finish']}) to get it done. Pray.")
         tournament.append(f"You ({my_entry}) sit #{me['proj']} of {n_total}. {need}")
 
-    # ── TKE recap — double the snark ──
+    # ── TKE recap — double the snark, take the gloves off ──
     tke_sorted = sorted(tke_rows_all, key=lambda r: r["proj"])
     if tke_sorted:
         top = tke_sorted[0]
         tke.append(_pick_variant([
-            f"🐉 TKE crown (for now): {top['alias']} at pool #{top['proj']}, riding {top['last']}. Insufferable already, and it's only going to get worse.",
-            f"{top['alias']} leads the TKE pack — {top['last']} carried him to #{top['proj']}. Reminder that even a blind squirrel finds a nut.",
-            f"Atop the brotherhood: {top['alias']} (#{top['proj']}). {top['last']} did the work; {top['alias']} will take the credit at the reunion.",
+            f"🐉 TKE crown (for now): {top['alias']} at pool #{top['proj']} on {top['last']}. Insufferable already, and we all know it curdles into a full personality by the reunion.",
+            f"{top['alias']} leads the brotherhood — {top['last']} carried him to #{top['proj']}. Living proof a blind squirrel trips over a nut once a season. Don't get used to it.",
+            f"Atop the pile of degenerates: {top['alias']} (#{top['proj']}). {top['last']} did 100% of the work; {top['alias']} will take 100% of the credit and 0% of the hint.",
         ], top["alias"]))
 
         tke_fallers = sorted([r for r in tke_rows_all if r["delta"] > 0], key=lambda r: -r["delta"])
         if tke_fallers:
             tf = tke_fallers[0]
             tke.append(_pick_variant([
-                f"{tf['alias']} face-planted {tf['delta']} spots with {tf['last']}. A pick so bad it should be studied. Frame it. Hang it. Apologize to the group chat.",
-                f"Hall of shame: {tf['alias']}, down {tf['delta']} on {tf['last']}. Were you picking with your eyes closed or just your heart? Embarrassing either way.",
-                f"{tf['alias']} torched {tf['delta']} places thanks to {tf['last']}. That's not a fantasy pick, that's a cry for help.",
+                f"{tf['alias']} face-planted {tf['delta']} spots on {tf['last']}. A pick so catastrophically dumb it belongs in a textbook. Frame it, hang it over the mantle, and write the group chat a formal apology.",
+                f"Hall of shame, gold plaque: {tf['alias']}, down {tf['delta']} on {tf['last']}. Were you picking with your eyes shut, or do you genuinely just hate money? Humiliating either way.",
+                f"{tf['alias']} torched {tf['delta']} places thanks to {tf['last']}. That's not a fantasy pick, that's a 911 call. Hand the laptop to an adult next week.",
             ], tf["alias"]))
 
         tke_eggs = [r for r in tke_rows_all if r["missed"]]
         if tke_eggs:
             names = ", ".join(f"{r['alias']} ({r['last']})" for r in tke_eggs[:5])
             tke.append(
-                f"TKE goose eggs 🥚: {names}. Zero dollars. Zero defense. "
-                "You had one job — pick a guy who plays four rounds — and you fumbled it. Venmo your dignity to the pot."
+                f"TKE goose eggs 🥚: {names}. Zero dollars. Zero excuses. Zero shame, apparently. "
+                "You had exactly one job — pick a man who plays four rounds of golf — and you blew it. "
+                "Venmo your dignity to the pot, because it's the only thing you're contributing this week."
             )
 
         my_t = next((i for i, r in enumerate(tke_sorted, 1) if r["entry"] == my_entry), None)
         if my_t:
             n_tke = len(tke_sorted)
             if my_t == 1:
-                tke.append(f"And yes, you're #1 of {n_tke} in the TKE group. Gloat responsibly.")
+                tke.append(f"And yes — you're #1 of {n_tke} in the group. Gloat shamelessly. They'd do it to you in a heartbeat.")
             elif my_t > n_tke - 3:
-                tke.append(f"You're #{my_t} of {n_tke} in the group — basement-adjacent. The boys have noticed. They always notice.")
+                tke.append(f"You're #{my_t} of {n_tke} in the group. Basement. The boys have noticed, they're screenshotting it, and it's going in the group chat with a caption you won't like.")
             else:
-                tke.append(f"You're #{my_t} of {n_tke} in the group. Mid. Aggressively mid.")
+                tke.append(f"You're #{my_t} of {n_tke} in the group. Mid. Gloriously, forgettably mid. Nobody's threatened, nobody's impressed.")
 
     return tournament, tke
 
