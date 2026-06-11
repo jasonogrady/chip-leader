@@ -193,9 +193,13 @@ def next_scheduled_event(after_name: str | None = None) -> dict | None:
     except Exception:
         return None
     today = datetime.now().date()
+    after_norm = clean_event_name(after_name) if after_name else None
     best = None  # (date, row)
     for name, row in sched.items():
-        if not name or name == after_name:
+        # Normalize the exclusion: after_name comes from the in-play feed (with
+        # sponsor suffix), schedule keys omit it — an exact compare fails to
+        # exclude the just-finished event.
+        if not name or (after_norm and clean_event_name(name) == after_norm):
             continue
         d = _parse_sched_date(row)
         if d is None or d < today:
@@ -222,6 +226,25 @@ def clean_event_name(name: str | None) -> str:
     if n[:4] == "the ":
         n = "The " + n[4:]
     return n
+
+def schedule_row_for(name: str | None) -> dict | None:
+    """Look up a schedule row by event name, tolerant of the two feeds naming the
+    same event differently. The in-play feed carries the sponsor suffix
+    ('the Memorial Tournament presented by Workday'); the schedule feed omits it
+    ('the Memorial Tournament'). An exact dict lookup misses, which silently drops
+    the schedule's authoritative status="completed" and strands the board on the
+    just-finished event. Fall back to matching on the normalized name."""
+    if not name:
+        return None
+    sched = fetch_schedule()
+    row = sched.get(name)
+    if row is not None:
+        return row
+    target = clean_event_name(name)
+    for nm, r in sched.items():
+        if clean_event_name(nm) == target:
+            return r
+    return None
 
 def event_tz(location: str | None) -> ZoneInfo:
     """Parse 'Miami, FL' → ZoneInfo. Falls back to America/New_York."""
@@ -3120,7 +3143,7 @@ def build_web_data(args) -> dict:
     next_event = None
     if not args.demo:
         try:
-            sched_row = fetch_schedule().get(tournament)
+            sched_row = schedule_row_for(tournament)
         except Exception:
             sched_row = None
         try:

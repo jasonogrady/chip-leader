@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.2.2 — 2026-06-10
+
+### Fix — intermission never fired because the two upstream feeds name events differently
+
+The public board stayed stuck on the just-finished event ("The Memorial Tournament" R4, `play.status: off-hours`) instead of flipping to the intermission dark-state card, even though the event was over and the next event was on the schedule. This is the origin-side root cause behind the same symptom v2.2.1 partially addressed at the edge.
+
+- Root cause: the in-play feed names events with the sponsor suffix (`the Memorial Tournament presented by Workday`); the `get-schedule` feed omits it (`the Memorial Tournament`). `compute_play_status` reached the schedule via `fetch_schedule().get(tournament)` — an exact-string lookup using the suffixed in-play name — which returned `None`, so the schedule's authoritative `status="completed"` never arrived and `concluded` stayed `False`. The `tournament_complete` fallback (`all(thru==18)`) can't cover the gap either: any event with a 36-hole cut leaves missed-cut players at `thru=0`, so it's never `True` for a cut event.
+- Fix: new `schedule_row_for()` resolves the schedule row by exact name first, then falls back to matching on `clean_event_name()` (which already normalizes both spellings to `The Memorial Tournament`). The `after_name` exclusion in `next_scheduled_event()` is normalized the same way.
+- Regression test: `tests/test_intermission_name_match.py` (first test infra in the repo) — fails against the old exact-`.get()` behavior, passes with the fix.
+
 ## v2.2.1 — 2026-06-10
 
 ### Fix — `no-store` on dynamic routes so the public URL can't serve a stale board

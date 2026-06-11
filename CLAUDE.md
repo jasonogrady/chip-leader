@@ -11,7 +11,7 @@ Headless gameday-only fork of [`chip-input`](https://github.com/jasonogrady/chip
 - **`chip lb`** — terminal 3-panel scoreboard (Tournament Top 20 · Pool Top 20 · Top TKEs).
 - **`chip web`** — browser dark-theme dashboard at `localhost:8765` with sortable tables, 120s auto-refresh, mobile-responsive collapse.
 
-Inputs (read-only; written by chip-input on the laptop and synced via iCloud):
+Inputs (read-only; written by chip-input, symlinked in from the local `chip-input` working tree):
 
 - `standings/standings_latest.json` — season-to-date pool standings (winnings, score, FedEx, cuts_made, cuts_ratio, fedex).
 - `picks_history.json` — historical picks across all entries.
@@ -30,12 +30,22 @@ Outputs:
 Steps — run locally on the mini (no SSH needed; Claude here has local access):
 
 ```zsh
-git pull origin main
+cd ~/chip-leader                                              # the live working tree (NOT ~/dev/chip-leader)
+git pull origin main                                          # origin = github.com/jasonogrady/chip-leader.git
 launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader   # restart the service
 sleep 2
 lsof -nP -iTCP:8765 -sTCP:LISTEN                               # confirm something is listening
 tail -n 40 ~/Library/Logs/chip-leader.log                     # if NOT listening, the crash is here
 ```
+
+- `origin` is the GitHub remote **`https://github.com/jasonogrady/chip-leader.git`**. (It used to be an
+  iCloud copy under `~/Library/Mobile Documents/.../GitHub/chip-leader`; that path is gone — the repo
+  moved off iCloud. If `git pull` ever reports the remote "does not appear to be a git repository", the
+  remote URL is pointing at the old iCloud path: `git remote set-url origin https://github.com/jasonogrady/chip-leader.git`.)
+- **`picks_history.json` not found in the log = dangling input symlinks.** The two data files are
+  symlinked in from the local `chip-input` working tree (see "Data sync from chip-input" below). If that
+  tree moves, the symlinks dangle, the tracker exits at startup, and KeepAlive respawns it forever without
+  binding 8765. Re-point the symlinks and kickstart.
 
 - The live view runs as a **KeepAlive LaunchAgent** labeled `com.feitclub.chipleader`
   (plist in `deploy/launchd/`), executing `chip web 8765`.
@@ -85,20 +95,24 @@ export DATAGOLF_API_KEY="$(security find-generic-password -s chip-leader -a data
 
 ## Data sync from chip-input
 
-Both machines share iCloud Drive. The two cross-cutting data files are produced by chip-input on the laptop:
+The two cross-cutting data files are produced by `chip-input` and symlinked into chip-leader's working
+tree so reads are direct. The `chip-input` working tree lives at **`~/dev/chip-input`** on this mini:
 
-- `~/Library/Mobile Documents/com~apple~CloudDocs/GitHub/chip-input/standings/standings_latest.json`
-- `~/Library/Mobile Documents/com~apple~CloudDocs/GitHub/chip-input/picks_history.json`
-
-On the Mac mini, symlink them into chip-leader's working tree so reads are direct:
+- `~/dev/chip-input/standings/standings_latest.json`
+- `~/dev/chip-input/picks_history.json`
 
 ```zsh
 cd ~/chip-leader
-ln -sf "$ICLOUD/GitHub/chip-input/standings/standings_latest.json" standings/standings_latest.json
-ln -sf "$ICLOUD/GitHub/chip-input/picks_history.json"             picks_history.json
+ln -sf ~/dev/chip-input/standings/standings_latest.json standings/standings_latest.json
+ln -sf ~/dev/chip-input/picks_history.json              picks_history.json
+# verify they resolve (a dangling symlink crash-loops the service — see "Deploy / redeploy"):
+ls -lL picks_history.json standings/standings_latest.json
 ```
 
-Where `$ICLOUD` is `~/Library/Mobile Documents/com~apple~CloudDocs`.
+> **History:** both repos used to live in iCloud Drive (`~/Library/Mobile Documents/.../GitHub/`) and
+> synced between laptop and mini that way. They have since moved off iCloud to local working trees
+> (`~/chip-leader`, `~/dev/chip-input`). If you see the old `~/Library/Mobile Documents/...` path
+> anywhere — a symlink target or a git remote — it's stale and needs re-pointing to the local copy.
 
 ---
 
@@ -108,12 +122,16 @@ See `BACKLOG.md` → "Mac mini deployment" for the LaunchAgent + Caddy + Tailsca
 
 ### Active deployment on this Mac mini (`modelhost`, user `tensor`)
 
-- Live working tree: `~/chip-leader` (cloned from this iCloud copy). Edits land in iCloud first, then sync to `~/chip-leader` and `launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader`.
+- Live working tree: `~/chip-leader` (the `~/dev/chip-leader` path is an unrelated empty dir — ignore it). To ship: commit + push to GitHub, then on the mini `cd ~/chip-leader && git pull origin main && launchctl kickstart -k gui/$(id -u)/com.feitclub.chipleader`.
 - LaunchAgent: `~/Library/LaunchAgents/com.feitclub.chipleader.plist`, sets `CHIP_NO_OPEN=1` so `webbrowser.open` is suppressed.
 - LAN URL: `http://modelhost.local:8765` (also `http://192.168.0.172:8765`).
 - Logs: `~/Library/Logs/chip-leader.log`.
 
-### Full Disk Access (required for iCloud reads under launchd)
+### Full Disk Access (legacy — only relevant if inputs live in iCloud)
+
+> Now that the input files are symlinked from a local tree (`~/dev/chip-input`) rather than iCloud, FDA
+> is no longer required for normal operation. Keep this section for the case where a symlink ever points
+> back into `~/Library/Mobile Documents` — the iCloud EDEADLK failures below only happen there.
 
 LaunchAgent-spawned `/bin/zsh`, `/usr/bin/python3`, and `/bin/cat` cannot traverse `~/Library/Mobile Documents` without Full Disk Access. Symptoms when missing:
 
